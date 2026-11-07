@@ -123,8 +123,21 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
 
 .banner{font-size:.85rem;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}
 .gated section[data-view],.gated nav,.gated .me{display:none!important}
+.more{position:relative;flex:none}
+.iconbtn{background:transparent;color:var(--muted);border:0;padding:0;border-radius:8px;display:grid;place-items:center;width:36px;height:36px}
+.iconbtn:hover,.iconbtn[aria-expanded="true"]{background:var(--surface-2);color:var(--fg)}
+.menu{position:absolute;right:0;top:calc(100% + 4px);z-index:8;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.16);padding:4px;display:grid;gap:2px}
+.menu button{background:none;color:var(--fg);text-align:left;font-weight:500;padding:10px 12px;border-radius:6px;border:0}
+.menu button:hover,.menu button:focus-visible{background:var(--surface-2)}
+.menu button.danger{color:var(--bad)}
+.editing{outline:2px solid var(--accent);outline-offset:2px}
 .noteside{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
 .calmenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+#updateBar{position:fixed;left:0;right:0;bottom:0;z-index:15;background:var(--accent);color:var(--accent-ink);padding-block:10px calc(10px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+#updateBar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0}
+#updateBar button{background:var(--accent-ink);color:var(--accent)}
+body.has-update #toast{bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+body.has-update main{padding-bottom:96px}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){ul.list > li{transition:background .2s}}
 </style>
@@ -229,7 +242,7 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
         <ul class="list" id="settleList"></ul>
       </div>
       <div class="panel">
-        <h2>Ausgabe eintragen</h2>
+        <h2 id="expHead">Ausgabe eintragen</h2>
         <form class="stack" id="expForm">
           <div style="display:flex;flex-wrap:wrap;gap:8px">
             <label class="f" style="flex-basis:180px">Wofür?<input type="text" id="expTitle" placeholder="z. B. Wocheneinkauf" required maxlength="80"></label>
@@ -237,7 +250,7 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
           </div>
           <label class="f">Bezahlt von<select id="expPayer" required></select></label>
           <div><h3>Geteilt zwischen</h3><div class="pickers" id="expWho"></div></div>
-          <div><button>Eintragen</button></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px"><button id="expSubmit">Eintragen</button><button type="button" class="ghost" id="expCancel" hidden>Abbrechen</button></div>
         </form>
       </div>
     </div>
@@ -324,6 +337,7 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
     </div>
   </div>
 </main>
+<div id="updateBar" role="status" hidden><div class="wrap"><span><b>Neue Version verfügbar.</b> Tippe auf Aktualisieren, um sie zu laden.</span><button id="updateBtn">Aktualisieren</button></div></div>
 <div id="toast" role="status" hidden></div>
 
 <script>
@@ -592,12 +606,12 @@ function render(){
   // Kasse
   $("#balList").innerHTML = S.mode==="loading" ? `<p class="hint">Lade …</p>` : balanceHTML(bal);
   const st = settlements(bal);
-  $("#settleList").innerHTML = S.mode==="loading" ? loading : st.length ? st.map(s=>`<li><div class="grow">${who(s.from)} <span class="meta">zahlt an</span> ${who(s.to)}</div><span class="money">${money(s.amount)}</span><button class="ghost small" data-settle="${s.from}:${s.to}:${s.amount}">Bezahlt</button></li>`).join("") : `<li style="display:block"><p class="empty">Alle sind quitt.</p></li>`;
+  $("#settleList").innerHTML = S.mode==="loading" ? loading : st.length ? st.map(s=>`<li><div class="grow">${who(s.from)} <span class="meta">zahlt an</span> ${who(s.to)}</div><span class="money">${money(s.amount)}</span>${moreMenu("settle-"+s.from+"-"+s.to, `<button role="menuitem" data-settle="${s.from}:${s.to}:${s.amount}">Als bezahlt markieren</button>`)}</li>`).join("") : `<li style="display:block"><p class="empty">Alle sind quitt.</p></li>`;
   const exps = [...S.expenses].sort((a,b)=>(b.created||0)-(a.created||0));
   $("#expList").innerHTML = L(exps.slice(0,60), e=>{
     const split = e.split||[];
     const forTxt = e.settle ? `an ${esc(mName(split[0]))}` : split.length===ms.length ? "für alle" : `für ${split.map(id=>esc(mName(id))).join(", ")}`;
-    return `<li><div class="grow"><b>${esc(e.title)}</b>${e.settle?` <span class="chip good">Ausgleich</span>`:""}<div class="meta">${who(e.paidBy)} ${forTxt} · ${new Date(e.created).toLocaleDateString("de-DE")}</div></div><span class="money">${money(e.amount)}</span><button class="link" data-del="expenses:${e.id}" aria-label="Ausgabe löschen">Löschen</button></li>`;
+    return `<li class="${e.id===editingExp?"editing":""}"><div class="grow"><b>${esc(e.title)}</b>${e.settle?` <span class="chip good">Ausgleich</span>`:""}<div class="meta">${who(e.paidBy)} ${forTxt} · ${new Date(e.created).toLocaleDateString("de-DE")}</div></div><span class="money">${money(e.amount)}</span>${moreMenu("exp-"+e.id, `<button role="menuitem" data-exp-edit="${e.id}">Bearbeiten</button><button role="menuitem" class="danger" data-del="expenses:${e.id}">Löschen</button>`)}</li>`;
   }, "Noch keine Ausgaben. Trag oben den ersten Einkauf ein.");
 
   // Pinnwand
@@ -611,6 +625,35 @@ function render(){
     : S.mode==="local" ? "Gemeinsames Speichern ist in dieser Ansicht nicht verfügbar. Alles bleibt nur auf diesem Gerät." : "";
   if (S.mode==="local" && !$("#statusBanner").textContent) setBanner("Offline-Modus: Daten werden nur auf diesem Gerät gespeichert.");
 }
+let openMenu = null, editingExp = null;
+const DOTS = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>`;
+function moreMenu(key, items){
+  const open = openMenu === key;
+  return `<div class="more"><button class="iconbtn" data-menu="${key}" aria-haspopup="menu" aria-expanded="${open}" aria-label="Weitere Aktionen">${DOTS}</button><div class="menu" role="menu" ${open?"":"hidden"}>${items}</div></div>`;
+}
+function closeMenus(){ openMenu = null; document.querySelectorAll(".more .menu").forEach(m=>m.hidden=true); document.querySelectorAll("[data-menu]").forEach(b=>b.setAttribute("aria-expanded","false")); }
+document.addEventListener("keydown", e=>{ if (e.key==="Escape" && openMenu) closeMenus(); });
+
+function startEditExp(id){
+  const e = S.expenses.find(x=>x.id===id); if (!e) return;
+  editingExp = id;
+  $("#expTitle").value = e.title; $("#expAmount").value = (e.amount/100).toFixed(2);
+  if (member(e.paidBy)) $("#expPayer").value = e.paidBy;
+  document.querySelectorAll('input[name="expWho"]').forEach(i=>i.checked = (e.split||[]).includes(i.value));
+  $("#expHead").textContent = "Ausgabe bearbeiten"; $("#expSubmit").textContent = "Änderung speichern"; $("#expCancel").hidden = false;
+  render();
+  $("#expForm").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"center"});
+  $("#expTitle").focus({preventScroll:true});
+}
+function stopEditExp(){
+  editingExp = null;
+  $("#expTitle").value = ""; $("#expAmount").value = "";
+  document.querySelectorAll('input[name="expWho"]').forEach(i=>i.checked = true);
+  if (me && member(me)) $("#expPayer").value = me;
+  $("#expHead").textContent = "Ausgabe eintragen"; $("#expSubmit").textContent = "Eintragen"; $("#expCancel").hidden = true;
+  render();
+}
+
 function noteLi(n, del){
   const d = n.date ? new Date(n.date+"T12:00") : null;
   const box = d ? `<div class="datebox"><span>${d.toLocaleDateString("de-DE",{month:"short"}).replace(".","")}</span><b>${d.getDate()}</b></div>` : "";
@@ -710,10 +753,16 @@ $("#expForm").addEventListener("submit", e=>{
   const split = checked("expWho");
   if (!(amount>0)) return toast("Gib einen Betrag über 0 € ein.");
   if (!split.length) return toast("Wähl aus, für wen die Ausgabe war.");
-  api.add("expenses",{title:$("#expTitle").value.trim(), amount, paidBy:$("#expPayer").value, split});
-  if ($("#expTitle").value.startsWith("Einkauf: ")) S.shopping.filter(s=>s.done).forEach(s=>api.remove("shopping",s.id));
+  const row = {title:$("#expTitle").value.trim(), amount, paidBy:$("#expPayer").value, split};
+  if (editingExp) {
+    if (!S.expenses.some(x=>x.id===editingExp)) { stopEditExp(); return toast("Diese Ausgabe wurde inzwischen gelöscht."); }
+    api.update("expenses", editingExp, row); stopEditExp(); return toast("Änderung gespeichert.");
+  }
+  api.add("expenses",row);
+  if (row.title.startsWith("Einkauf: ")) S.shopping.filter(s=>s.done).forEach(s=>api.remove("shopping",s.id));
   $("#expTitle").value=""; $("#expAmount").value=""; toast(`${money(amount)} eingetragen.`);
 });
+$("#expCancel").addEventListener("click", stopEditExp);
 $("#noteForm").addEventListener("submit", e=>{
   e.preventDefault();
   const date = $("#noteDate").value||null, time = date ? ($("#noteTime").value||null) : null;
@@ -724,7 +773,15 @@ $("#noteForm").addEventListener("submit", e=>{
 
 let pendingDelete = null;
 document.addEventListener("click", e=>{
+  if (openMenu && !e.target.closest(".more")) closeMenus();
   const t = e.target.closest("button,input"); if (!t) return;
+  if (t.dataset.menu){
+    const key = t.dataset.menu, wasOpen = openMenu === key;
+    closeMenus();
+    if (!wasOpen){ openMenu = key; t.setAttribute("aria-expanded","true"); const m = t.nextElementSibling; m.hidden = false; m.querySelector("button")?.focus(); }
+    return;
+  }
+  if (t.dataset.expEdit){ closeMenus(); startEditExp(t.dataset.expEdit); return; }
   if (t.dataset.shop){ const s=S.shopping.find(x=>x.id===t.dataset.shop); if(s) api.update("shopping",s.id,{done:!s.done}); return; }
   if (t.dataset.choreDone){
     const c=S.chores.find(x=>x.id===t.dataset.choreDone); if(!c) return;
@@ -749,6 +806,7 @@ document.addEventListener("click", e=>{
     document.querySelectorAll(`[id="calmenu-${n.id}"]`).forEach(m=>m.hidden=!m.hidden); return;
   }
   if (t.dataset.settle){
+    closeMenus();
     const [from,to,amount]=t.dataset.settle.split(":");
     api.add("expenses",{title:"Ausgleich",amount:+amount,paidBy:from,split:[to],settle:true}); toast("Als bezahlt eingetragen."); return;
   }
@@ -756,10 +814,29 @@ document.addEventListener("click", e=>{
     const key = t.dataset.del || "members:"+t.dataset.delMember;
     if (pendingDelete !== key){ pendingDelete = key; t.textContent = "Sicher?"; t.style.color="var(--bad)"; setTimeout(()=>{ if(pendingDelete===key){ pendingDelete=null; render(); } },3000); return; }
     pendingDelete = null; const [col,id]=key.split(":");
+    closeMenus(); if (col==="expenses" && id===editingExp) stopEditExp();
     if (col==="members") toast(`${mName(id)} ist ausgezogen. Alte Einträge bleiben erhalten.`);
     api.remove(col,id);
   }
 });
+
+/* ---------- Updates ---------- */
+const APP_VERSION = "2026-11-07.1";
+let newVersion = null;
+async function checkUpdate(){
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, {cache:"no-store"}); if (!r.ok) return;
+    const v = (await r.json()).version;
+    if (v && v !== APP_VERSION) { newVersion = v; $("#updateBar").hidden = false; document.body.classList.add("has-update"); }
+  } catch {}
+}
+$("#updateBtn").addEventListener("click", () => {
+  const q = new URLSearchParams(); if (WG) q.set("wg", WG); q.set("v", newVersion || Date.now());
+  location.replace(`${location.pathname}?${q}${location.hash}`);
+});
+setTimeout(checkUpdate, 3000);
+setInterval(checkUpdate, 15*60*1000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
 
 route(); render(); connect();
 })();
