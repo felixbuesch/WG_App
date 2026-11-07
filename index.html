@@ -138,7 +138,9 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
 #updateBar button{background:var(--accent-ink);color:var(--accent)}
 body.has-update #toast{bottom:calc(72px + env(safe-area-inset-bottom,0px))}
 body.has-update main{padding-bottom:96px}
-#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px);display:flex;align-items:center;gap:12px}
+#toast[hidden]{display:none}
+#toast button{background:none;color:var(--bg);border:0;padding:2px 4px;font-weight:700;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
 @media (prefers-reduced-motion:no-preference){ul.list > li{transition:background .2s}}
 </style>
 
@@ -191,7 +193,7 @@ body.has-update main{padding-bottom:96px}
       <ul class="list" id="choreList"></ul>
     </div>
     <div class="panel">
-      <h2>Neue Aufgabe</h2>
+      <h2 id="choreHead">Neue Aufgabe</h2>
       <form class="stack" id="choreForm">
         <div class="row" style="display:flex;flex-wrap:wrap;gap:8px">
           <label class="f" style="flex-basis:220px">Was?<input type="text" id="choreTitle" placeholder="z. B. Bad putzen" required maxlength="60"></label>
@@ -204,10 +206,11 @@ body.has-update main{padding-bottom:96px}
               <option value="30">monatlich</option>
             </select>
           </label>
-          <label class="f">Erstmals fällig<input type="date" id="choreDue"></label>
+          <label class="f"><span id="choreDueLabel">Erstmals fällig</span><input type="date" id="choreDue"></label>
+          <label class="f" id="choreNowWrap" hidden>Jetzt dran<select id="choreNow"></select></label>
         </div>
-        <div><h3>Reihum zwischen (erste Person beginnt)</h3><div class="pickers" id="choreWho"></div></div>
-        <div><button>Aufgabe anlegen</button></div>
+        <div><h3 id="choreWhoHead">Reihum zwischen (erste Person beginnt)</h3><div class="pickers" id="choreWho"></div></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px"><button id="choreSubmit">Aufgabe anlegen</button><button type="button" class="ghost" id="choreCancel" hidden>Abbrechen</button></div>
       </form>
     </div>
   </section>
@@ -358,7 +361,11 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString
 const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
 
 let toastT;
-function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2600); }
+function toast(msg, action){
+  const t=$("#toast"); t.textContent=""; const span=document.createElement("span"); span.textContent=msg; t.append(span);
+  if (action){ const b=document.createElement("button"); b.type="button"; b.textContent=action.label; b.onclick=()=>{ t.hidden=true; action.fn(); }; t.append(b); }
+  t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, action?7000:2600);
+}
 
 /* ---------- Data layer: shared db when available, otherwise this device only ---------- */
 const S = { mode:"loading", members:[], chores:[], shopping:[], expenses:[], notes:[], info:{} };
@@ -585,16 +592,15 @@ function render(){
   // Putzplan
   $("#choreList").innerHTML = L(chores, c=>{
     const a = choreAssignee(c); const r=(c.rotation||[]).filter(member);
-    const next = r.length>1 ? r[((c.idx||0)+1)%r.length] : null;
+    const next = r.length>1 ? r[(r.indexOf(a)+1)%r.length] : null;
     const every = {1:"täglich",3:"alle 3 Tage",7:"wöchentlich",14:"alle 2 Wochen",30:"monatlich"}[c.every] || `alle ${c.every} Tage`;
     const last = c.lastBy ? ` · zuletzt ${esc(mName(c.lastBy))}, ${fmtDate(c.lastAt)}` : "";
-    return `<li style="flex-wrap:wrap"><div class="grow" style="flex-basis:200px"><b>${esc(c.title)}</b> ${dueChip(c.due)}
+    return `<li style="flex-wrap:wrap" class="${c.id===editingChore?"editing":""}"><div class="grow" style="flex-basis:200px"><b>${esc(c.title)}</b> ${dueChip(c.due)}
       <div class="meta">Dran: ${a?who(a):"niemand"}${next?` · danach ${esc(mName(next))}`:""}</div>
       <div class="meta">${every}${last}</div></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;align-items:center">
         <button class="small" data-chore-done="${c.id}" ${readOnly?"disabled":""}>Erledigt</button>
-        ${r.length>1?`<button class="ghost small" data-chore-pass="${c.id}" title="Diesmal übernimmt die nächste Person">Weitergeben</button>`:""}
-        <button class="link" data-del="chores:${c.id}" aria-label="${esc(c.title)} löschen">Löschen</button>
+        ${moreMenu("chore-"+c.id, `<button role="menuitem" data-chore-edit="${c.id}">Bearbeiten</button>${r.length>1?`<button role="menuitem" data-chore-pass="${c.id}">Weitergeben an ${esc(mName(next))}</button>`:""}<button role="menuitem" class="danger" data-del="chores:${c.id}">Löschen</button>`)}
       </div></li>`;
   }, "Noch keine Aufgaben. Leg unten die erste an, z. B. Bad, Küche oder Müll.");
 
@@ -625,7 +631,33 @@ function render(){
     : S.mode==="local" ? "Gemeinsames Speichern ist in dieser Ansicht nicht verfügbar. Alles bleibt nur auf diesem Gerät." : "";
   if (S.mode==="local" && !$("#statusBanner").textContent) setBanner("Offline-Modus: Daten werden nur auf diesem Gerät gespeichert.");
 }
-let openMenu = null, editingExp = null;
+let openMenu = null, editingExp = null, editingChore = null;
+function startEditChore(id){
+  const c = S.chores.find(x=>x.id===id); if (!c) return;
+  editingChore = id;
+  $("#choreTitle").value = c.title; $("#choreEvery").value = String(c.every);
+  if ($("#choreEvery").value !== String(c.every)) { const o=document.createElement("option"); o.value=c.every; o.textContent=`alle ${c.every} Tage`; $("#choreEvery").append(o); $("#choreEvery").value=String(c.every); }
+  $("#choreDue").value = c.due;
+  const rot = (c.rotation||[]).filter(member);
+  document.querySelectorAll('input[name="choreWho"]').forEach(i=>i.checked = rot.includes(i.value));
+  $("#choreNow").innerHTML = sortedMembers().map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  const a = choreAssignee(c); if (a) $("#choreNow").value = a;
+  $("#choreHead").textContent = "Aufgabe bearbeiten"; $("#choreDueLabel").textContent = "Nächstes Mal fällig";
+  $("#choreWhoHead").textContent = "Reihum zwischen"; $("#choreNowWrap").hidden = false;
+  $("#choreSubmit").textContent = "Änderung speichern"; $("#choreCancel").hidden = false;
+  render();
+  $("#choreForm").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"center"});
+  $("#choreTitle").focus({preventScroll:true});
+}
+function stopEditChore(){
+  editingChore = null;
+  $("#choreTitle").value = ""; $("#choreEvery").value = "7"; $("#choreDue").value = today();
+  document.querySelectorAll('input[name="choreWho"]').forEach(i=>i.checked = true);
+  $("#choreHead").textContent = "Neue Aufgabe"; $("#choreDueLabel").textContent = "Erstmals fällig";
+  $("#choreWhoHead").textContent = "Reihum zwischen (erste Person beginnt)"; $("#choreNowWrap").hidden = true;
+  $("#choreSubmit").textContent = "Aufgabe anlegen"; $("#choreCancel").hidden = true;
+  render();
+}
 const DOTS = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>`;
 function moreMenu(key, items){
   const open = openMenu === key;
@@ -732,7 +764,14 @@ $("#choreDue").value = today();
 $("#choreForm").addEventListener("submit", e=>{
   e.preventDefault();
   const rotation = checked("choreWho"); if (!rotation.length) return toast("Wähl mindestens eine Person aus.");
-  api.add("chores",{title:$("#choreTitle").value.trim(), every:+$("#choreEvery").value, due:$("#choreDue").value||today(), rotation, idx:0});
+  const row = {title:$("#choreTitle").value.trim(), every:+$("#choreEvery").value, due:$("#choreDue").value||today(), rotation};
+  if (editingChore) {
+    if (!S.chores.some(x=>x.id===editingChore)) { stopEditChore(); return toast("Diese Aufgabe wurde inzwischen gelöscht."); }
+    const now = $("#choreNow").value;
+    if (!rotation.includes(now)) return toast(`${mName(now)} ist nicht in der Reihe. Hak die Person an oder wähl jemand anderen.`);
+    api.update("chores", editingChore, {...row, idx: rotation.indexOf(now)}); stopEditChore(); return toast("Änderung gespeichert.");
+  }
+  api.add("chores",{...row, idx:0});
   $("#choreTitle").value=""; toast("Aufgabe angelegt.");
 });
 $("#shopForm").addEventListener("submit", e=>{
@@ -763,6 +802,7 @@ $("#expForm").addEventListener("submit", e=>{
   $("#expTitle").value=""; $("#expAmount").value=""; toast(`${money(amount)} eingetragen.`);
 });
 $("#expCancel").addEventListener("click", stopEditExp);
+$("#choreCancel").addEventListener("click", stopEditChore);
 $("#noteForm").addEventListener("submit", e=>{
   e.preventDefault();
   const date = $("#noteDate").value||null, time = date ? ($("#noteTime").value||null) : null;
@@ -782,6 +822,7 @@ document.addEventListener("click", e=>{
     return;
   }
   if (t.dataset.expEdit){ closeMenus(); startEditExp(t.dataset.expEdit); return; }
+  if (t.dataset.choreEdit){ closeMenus(); startEditChore(t.dataset.choreEdit); return; }
   if (t.dataset.shop){ const s=S.shopping.find(x=>x.id===t.dataset.shop); if(s) api.update("shopping",s.id,{done:!s.done}); return; }
   if (t.dataset.choreDone){
     const c=S.chores.find(x=>x.id===t.dataset.choreDone); if(!c) return;
@@ -789,13 +830,17 @@ document.addEventListener("click", e=>{
     let idx = c.idx||0;
     if (r.length){ const pos = r.indexOf(doer); idx = ((pos>=0?pos:idx%r.length)+1) % r.length; idx = c.rotation.indexOf(r[idx]); }
     const base = c.due > today() ? c.due : today();
+    const before = {idx:c.idx||0, due:c.due, lastBy:c.lastBy||null, lastAt:c.lastAt||null};
     api.update("chores",c.id,{idx, due:addDays(base,c.every), lastBy:doer||null, lastAt:today()});
-    toast(`${c.title}: erledigt. Danke!`); return;
+    toast(`${c.title}: erledigt. Danke!`, {label:"Rückgängig", fn:()=>{ api.update("chores",c.id,before); toast("Rückgängig gemacht."); }}); return;
   }
   if (t.dataset.chorePass){
+    closeMenus();
     const c=S.chores.find(x=>x.id===t.dataset.chorePass); if(!c) return;
     const r=(c.rotation||[]).filter(member); const cur=r.indexOf(choreAssignee(c)); const nxt=r[(cur+1)%r.length];
-    api.update("chores",c.id,{idx:c.rotation.indexOf(nxt)}); toast(`${mName(nxt)} ist jetzt dran.`); return;
+    const before = c.idx||0;
+    api.update("chores",c.id,{idx:c.rotation.indexOf(nxt)});
+    toast(`${mName(nxt)} ist jetzt dran.`, {label:"Rückgängig", fn:()=>{ api.update("chores",c.id,{idx:before}); toast("Rückgängig gemacht."); }}); return;
   }
   if (t.dataset.cal || t.dataset.calIcs || t.dataset.calGoogle){
     const n = S.notes.find(x=>x.id===(t.dataset.cal||t.dataset.calIcs||t.dataset.calGoogle)); if (!n || !n.date) return;
@@ -814,14 +859,14 @@ document.addEventListener("click", e=>{
     const key = t.dataset.del || "members:"+t.dataset.delMember;
     if (pendingDelete !== key){ pendingDelete = key; t.textContent = "Sicher?"; t.style.color="var(--bad)"; setTimeout(()=>{ if(pendingDelete===key){ pendingDelete=null; render(); } },3000); return; }
     pendingDelete = null; const [col,id]=key.split(":");
-    closeMenus(); if (col==="expenses" && id===editingExp) stopEditExp();
+    closeMenus(); if (col==="expenses" && id===editingExp) stopEditExp(); if (col==="chores" && id===editingChore) stopEditChore();
     if (col==="members") toast(`${mName(id)} ist ausgezogen. Alte Einträge bleiben erhalten.`);
     api.remove(col,id);
   }
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.1";
+const APP_VERSION = "2026-11-07.2";
 let newVersion = null;
 async function checkUpdate(){
   try {
