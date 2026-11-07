@@ -144,6 +144,20 @@ body.has-update main{padding-bottom:96px}
 #confirmDlg p{margin:0 0 18px;color:var(--muted)}
 #confirmDlg .acts{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 #confirmDlg button.danger{background:var(--bad);color:var(--surface)}
+h1 a.home{color:inherit;text-decoration:none;display:block;border-radius:6px}
+h1 a.home:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.fab{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));z-index:12;width:58px;height:58px;border-radius:50%;padding:0;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 22px rgba(30,36,8,.32)}
+.fab:active{transform:scale(.96)}
+body.has-update .fab{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+body.has-fab main{padding-bottom:96px}
+body.has-fab #toast{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+body.has-fab.has-update #toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
+dialog.sheet{border:1px solid var(--line);background:var(--surface);color:var(--fg);width:100%;max-width:560px;max-height:88vh;overflow:auto;margin:auto auto 0;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+dialog.sheet::backdrop{background:rgba(20,22,12,.45)}
+@media (min-width:640px){dialog.sheet{margin:auto;border-radius:16px;padding:20px}}
+@media (prefers-reduced-motion:no-preference){dialog.sheet[open]{animation:sheetIn .22s ease-out}@keyframes sheetIn{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}}
+.sheethead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.gated .fab{display:none!important}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px);display:flex;align-items:center;gap:12px}
 #toast[hidden]{display:none}
 #toast button{background:none;color:var(--bg);border:0;padding:2px 4px;font-weight:700;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
@@ -153,7 +167,7 @@ body.has-update main{padding-bottom:96px}
 <header>
   <div class="wrap">
     <div class="top">
-      <h1 id="wgTitle"><small>WG-Planer</small><span id="wgName">Unsere WG</span></h1>
+      <h1 id="wgTitle"><a href="#start" class="home" aria-label="Zur Übersicht"><small>WG-Planer</small><span id="wgName">Unsere WG</span></a></h1>
       <label class="me" for="meSel">Ich bin
         <select id="meSel" style="width:auto"><option value="">–</option></select>
       </label>
@@ -198,8 +212,105 @@ body.has-update main{padding-bottom:96px}
       <h2>Aufgaben im Wechsel</h2>
       <ul class="list" id="choreList"></ul>
     </div>
+  </section>
+
+  <!-- EINKAUF -->
+  <section data-view="einkauf" hidden>
     <div class="panel">
-      <h2 id="choreHead">Neue Aufgabe</h2>
+      <h2>Einkaufsliste</h2>
+      <ul class="list" id="shopList"></ul>
+      <div id="shopDoneWrap" hidden style="margin-top:14px">
+        <h3>Im Korb</h3>
+        <ul class="list" id="shopDone"></ul>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+          <button class="ghost small" id="shopToKasse">Als Ausgabe eintragen</button>
+          <button class="ghost small" id="shopClear">Erledigte entfernen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KASSE -->
+  <section data-view="kasse" hidden>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Wer schuldet wem?</h2>
+        <div id="balList"></div>
+        <h3 style="margin-top:16px">So wird ausgeglichen</h3>
+        <ul class="list" id="settleList"></ul>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Verlauf</h2>
+      <ul class="list" id="expList"></ul>
+    </div>
+  </section>
+
+  <!-- PINNWAND -->
+  <section data-view="pinnwand" hidden>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Termine</h2>
+        <ul class="list" id="eventList"></ul>
+      </div>
+      <div class="panel">
+        <h2>Zettel</h2>
+        <ul class="list" id="noteList"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- WG -->
+  <section data-view="wg" hidden>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Mitbewohner</h2>
+        <ul class="list" id="memberList"></ul>
+      </div>
+      <div class="panel">
+        <h2>Name der WG</h2>
+        <form class="row" id="nameForm">
+          <label class="f">Name<input type="text" id="wgNameInput" placeholder="z. B. Hinterhaus 3. OG" maxlength="40"></label>
+          <button>Speichern</button>
+        </form>
+        <p class="hint" style="margin-top:14px" id="syncHint"></p>
+      </div>
+      <div class="panel" id="invitePanel" hidden>
+        <h2>Mitbewohner einladen</h2>
+        <p class="hint">Schick diesen Link an alle in der WG. Wer ihn öffnet, ist direkt drin.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+          <input type="text" id="inviteLink" readonly style="flex:1 1 220px" aria-label="Einladungslink">
+          <button id="copyInvite">Link kopieren</button>
+        </div>
+        <p class="hint" style="margin-top:10px">WG-Code: <span class="money" id="wgCodeShow"></span></p>
+        <button class="ghost small" id="leaveWg" style="margin-top:12px">Auf diesem Gerät abmelden</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ZUGANG -->
+  <div class="panel" id="gate" hidden>
+    <h2>Willkommen beim WG-Planer</h2>
+    <p class="banner" id="gateMoved" hidden style="margin-bottom:12px">Dieser WG-Code ist nicht mehr gültig. Frag in deiner WG nach dem neuen Einladungslink.</p>
+    <p class="hint">Jede WG hat einen eigenen Code. Wer den Code kennt, kann eure Daten sehen und bearbeiten. Gebt ihn also nur an Mitbewohner weiter.</p>
+    <div class="grid2" style="margin-top:16px">
+      <div>
+        <h3>Neue WG</h3>
+        <p class="hint">Erstellt einen neuen Code. Den Einladungslink findest du danach im Bereich „WG“.</p>
+        <button id="gateNew" style="margin-top:10px">WG gründen</button>
+      </div>
+      <div>
+        <h3>Schon eingeladen?</h3>
+        <form class="row" id="gateForm">
+          <label class="f">WG-Code oder Einladungslink<input type="text" id="gateCode" placeholder="Code oder Einladungslink einfügen" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+          <button>Beitreten</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
+  <dialog class="sheet" id="sheet-chore" aria-labelledby="choreHead">
+    <div class="sheethead"><h2 id="choreHead">Neue Aufgabe</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
       <form class="stack" id="choreForm">
         <div class="row" style="display:flex;flex-wrap:wrap;gap:8px">
           <label class="f" style="flex-basis:220px">Was?<input type="text" id="choreTitle" placeholder="z. B. Bad putzen" required maxlength="60"></label>
@@ -231,42 +342,19 @@ body.has-update main{padding-bottom:96px}
           </div>
         </div>
         <div><h3 id="choreWhoHead">Reihum zwischen (erste Person beginnt)</h3><div class="pickers" id="choreWho"></div></div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px"><button id="choreSubmit">Aufgabe anlegen</button><button type="button" class="ghost" id="choreCancel" hidden>Abbrechen</button></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px"><button id="choreSubmit">Aufgabe anlegen</button><button type="button" class="ghost" id="choreCancel">Abbrechen</button></div>
       </form>
-    </div>
-  </section>
-
-  <!-- EINKAUF -->
-  <section data-view="einkauf" hidden>
-    <div class="panel">
-      <h2>Einkaufsliste</h2>
-      <form class="row" id="shopForm" style="margin-bottom:8px">
+  </dialog>
+  <dialog class="sheet" id="sheet-shop" aria-labelledby="shopHead">
+    <div class="sheethead"><h2 id="shopHead">Auf die Einkaufsliste</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
+      <form class="row" id="shopForm">
         <label class="f" style="flex-basis:220px">Artikel<input type="text" id="shopText" placeholder="z. B. Spülmittel, Klopapier" required maxlength="80"></label>
-        <button>Auf die Liste</button>
+        <button>Hinzufügen</button>
       </form>
-      <ul class="list" id="shopList"></ul>
-      <div id="shopDoneWrap" hidden style="margin-top:14px">
-        <h3>Im Korb</h3>
-        <ul class="list" id="shopDone"></ul>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
-          <button class="ghost small" id="shopToKasse">Als Ausgabe eintragen</button>
-          <button class="ghost small" id="shopClear">Erledigte entfernen</button>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- KASSE -->
-  <section data-view="kasse" hidden>
-    <div class="grid2">
-      <div class="panel">
-        <h2>Wer schuldet wem?</h2>
-        <div id="balList"></div>
-        <h3 style="margin-top:16px">So wird ausgeglichen</h3>
-        <ul class="list" id="settleList"></ul>
-      </div>
-      <div class="panel">
-        <h2 id="expHead">Ausgabe eintragen</h2>
+    <p class="hint" style="margin-top:8px">Mehrere Sachen auf einmal mit Komma trennen. Das Fenster bleibt offen, bis du es schließt.</p>
+  </dialog>
+  <dialog class="sheet" id="sheet-exp" aria-labelledby="expHead">
+    <div class="sheethead"><h2 id="expHead">Ausgabe eintragen</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
         <form class="stack" id="expForm">
           <div style="display:flex;flex-wrap:wrap;gap:8px">
             <label class="f" style="flex-basis:180px">Wofür?<input type="text" id="expTitle" placeholder="z. B. Wocheneinkauf" required maxlength="80"></label>
@@ -274,30 +362,11 @@ body.has-update main{padding-bottom:96px}
           </div>
           <label class="f">Bezahlt von<select id="expPayer" required></select></label>
           <div><h3>Geteilt zwischen</h3><div class="pickers" id="expWho"></div></div>
-          <div style="display:flex;flex-wrap:wrap;gap:8px"><button id="expSubmit">Eintragen</button><button type="button" class="ghost" id="expCancel" hidden>Abbrechen</button></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px"><button id="expSubmit">Eintragen</button><button type="button" class="ghost" id="expCancel">Abbrechen</button></div>
         </form>
-      </div>
-    </div>
-    <div class="panel">
-      <h2>Verlauf</h2>
-      <ul class="list" id="expList"></ul>
-    </div>
-  </section>
-
-  <!-- PINNWAND -->
-  <section data-view="pinnwand" hidden>
-    <div class="grid2">
-      <div class="panel">
-        <h2>Termine</h2>
-        <ul class="list" id="eventList"></ul>
-      </div>
-      <div class="panel">
-        <h2>Zettel</h2>
-        <ul class="list" id="noteList"></ul>
-      </div>
-    </div>
-    <div class="panel">
-      <h2>Etwas anpinnen</h2>
+  </dialog>
+  <dialog class="sheet" id="sheet-note" aria-labelledby="noteHead">
+    <div class="sheethead"><h2 id="noteHead">Etwas anpinnen</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
       <form class="stack" id="noteForm">
         <label class="f">Nachricht<textarea id="noteText" placeholder="z. B. Handwerker kommt wegen der Heizung, bitte jemand zu Hause sein" required maxlength="400"></textarea></label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end">
@@ -306,61 +375,15 @@ body.has-update main{padding-bottom:96px}
           <button>Anpinnen</button>
         </div>
       </form>
-    </div>
-  </section>
-
-  <!-- WG -->
-  <section data-view="wg" hidden>
-    <div class="grid2">
-      <div class="panel">
-        <h2>Mitbewohner</h2>
-        <ul class="list" id="memberList"></ul>
-        <form class="row" id="memberForm" style="margin-top:12px">
+  </dialog>
+  <dialog class="sheet" id="sheet-member" aria-labelledby="memberHead">
+    <div class="sheethead"><h2 id="memberHead">Mitbewohner hinzufügen</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
+        <form class="row" id="memberForm">
           <label class="f">Name<input type="text" id="memberName" placeholder="Name" required maxlength="30"></label>
           <button>Hinzufügen</button>
         </form>
-      </div>
-      <div class="panel">
-        <h2>Name der WG</h2>
-        <form class="row" id="nameForm">
-          <label class="f">Name<input type="text" id="wgNameInput" placeholder="z. B. Hinterhaus 3. OG" maxlength="40"></label>
-          <button>Speichern</button>
-        </form>
-        <p class="hint" style="margin-top:14px" id="syncHint"></p>
-      </div>
-      <div class="panel" id="invitePanel" hidden>
-        <h2>Mitbewohner einladen</h2>
-        <p class="hint">Schick diesen Link an alle in der WG. Wer ihn öffnet, ist direkt drin.</p>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
-          <input type="text" id="inviteLink" readonly style="flex:1 1 220px" aria-label="Einladungslink">
-          <button id="copyInvite">Link kopieren</button>
-        </div>
-        <p class="hint" style="margin-top:10px">WG-Code: <span class="money" id="wgCodeShow"></span></p>
-        <button class="ghost small" id="leaveWg" style="margin-top:12px">Auf diesem Gerät abmelden</button>
-      </div>
-    </div>
-  </section>
-
-  <!-- ZUGANG -->
-  <div class="panel" id="gate" hidden>
-    <h2>Willkommen beim WG-Planer</h2>
-    <p class="hint">Jede WG hat einen eigenen Code. Wer den Code kennt, kann eure Daten sehen und bearbeiten. Gebt ihn also nur an Mitbewohner weiter.</p>
-    <div class="grid2" style="margin-top:16px">
-      <div>
-        <h3>Neue WG</h3>
-        <p class="hint">Erstellt einen neuen Code. Den Einladungslink findest du danach im Bereich „WG“.</p>
-        <button id="gateNew" style="margin-top:10px">WG gründen</button>
-      </div>
-      <div>
-        <h3>Schon eingeladen?</h3>
-        <form class="row" id="gateForm">
-          <label class="f">WG-Code oder Einladungslink<input type="text" id="gateCode" placeholder="Code oder Einladungslink einfügen" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-          <button>Beitreten</button>
-        </form>
-      </div>
-    </div>
-  </div>
-</main>
+  </dialog>
+<button class="fab" id="fab" type="button" hidden><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg></button>
 <div id="updateBar" role="status" hidden><div class="wrap"><span><b>Neue Version verfügbar.</b> Tippe auf Aktualisieren, um sie zu laden.</span><button id="updateBtn">Aktualisieren</button></div></div>
 <dialog id="confirmDlg" aria-labelledby="confirmTitle">
   <h2 id="confirmTitle"></h2>
@@ -461,7 +484,7 @@ async function firebaseDb(code){
   };
 }
 function showGate(){ document.body.classList.add("gated"); $("#gate").hidden = false; }
-function enterWg(code){ ls.set("wg-code", code); $("#gate").hidden = true; document.body.classList.remove("gated"); connect(); }
+function enterWg(code){ ls.set("wg-code", code); if (db) { location.replace(`${location.pathname}?wg=${code}`); return; } $("#gate").hidden = true; document.body.classList.remove("gated"); connect(); }
 $("#gateNew").addEventListener("click", () => { enterWg(newCode()); location.hash = "wg"; toast("WG gegründet. Lade jetzt deine Mitbewohner ein."); });
 $("#gateForm").addEventListener("submit", e => {
   e.preventDefault(); const c = normCode($("#gateCode").value);
@@ -498,7 +521,11 @@ async function connect(){
   const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===COLS.length+1){ clearTimeout(timer); setBanner(""); } } };
   const fail = (e) => { clearTimeout(timer); setBanner(e.code==="permission-denied" ? "Kein Zugriff auf die Datenbank. Sind die Firestore-Regeln eingerichtet?" : "Die gemeinsamen Daten konnten nicht geladen werden. Lade die Seite neu."); };
   for (const c of COLS) db.collection(c).onSnapshot(snap => { S[c] = snap.docs.map(d=>({id:d.id,...d.data()})); ok(c,snap); render(); }, fail);
-  db.doc("wg/info").onSnapshot(snap => { S.info = snap.exists ? snap.data() : {}; ok("info",snap); render(); }, fail);
+  db.doc("wg/info").onSnapshot(snap => {
+    S.info = snap.exists ? snap.data() : {};
+    if (S.info.moved) { try { localStorage.removeItem("wg-code"); } catch {} history.replaceState(null, "", location.pathname); $("#invitePanel").hidden = true; $("#gateMoved").hidden = false; showGate(); return; }
+    ok("info",snap); render();
+  }, fail);
   render();
 }
 function setBanner(t){ const b=$("#statusBanner"); b.textContent=t; b.hidden=!t; }
@@ -628,7 +655,7 @@ function render(){
         <button class="small" data-chore-done="${c.id}" ${readOnly?"disabled":""}>Erledigt</button>
         ${moreMenu("chore-"+c.id, `<button role="menuitem" data-chore-edit="${c.id}">Bearbeiten</button>${r.length>1?`<button role="menuitem" data-chore-pass="${c.id}">Weitergeben an ${esc(mName(next))}</button>`:""}<button role="menuitem" class="danger" data-del="chores:${c.id}">Löschen</button>`)}
       </div></li>`;
-  }, "Noch keine Aufgaben. Leg unten die erste an, z. B. Bad, Küche oder Müll.");
+  }, "Noch keine Aufgaben. Tippe auf +, um die erste anzulegen, z. B. Bad, Küche oder Müll.");
 
   // Einkauf
   $("#shopList").innerHTML = L(openShop, s=>`<li><input type="checkbox" class="chk" data-shop="${s.id}" aria-label="${esc(s.text)} abhaken"><span class="grow">${esc(s.text)}${s.by?`<span class="meta"> · ${esc(mName(s.by))}</span>`:""}</span><button class="link" data-del="shopping:${s.id}" aria-label="${esc(s.text)} löschen">Löschen</button></li>`, "Die Liste ist leer.");
@@ -644,7 +671,7 @@ function render(){
     const split = e.split||[];
     const forTxt = e.settle ? `an ${esc(mName(split[0]))}` : split.length===ms.length ? "für alle" : `für ${split.map(id=>esc(mName(id))).join(", ")}`;
     return `<li class="${e.id===editingExp?"editing":""}"><div class="grow"><b>${esc(e.title)}</b>${e.settle?` <span class="chip good">Ausgleich</span>`:""}<div class="meta">${who(e.paidBy)} ${forTxt} · ${new Date(e.created).toLocaleDateString("de-DE")}</div></div><span class="money">${money(e.amount)}</span>${moreMenu("exp-"+e.id, `<button role="menuitem" data-exp-edit="${e.id}">Bearbeiten</button><button role="menuitem" class="danger" data-del="expenses:${e.id}">Löschen</button>`)}</li>`;
-  }, "Noch keine Ausgaben. Trag oben den ersten Einkauf ein.");
+  }, "Noch keine Ausgaben. Tippe auf +, um die erste einzutragen.");
 
   // Pinnwand
   $("#eventList").innerHTML = L(events, n=>noteLi(n,true), "Keine anstehenden Termine.");
@@ -684,9 +711,9 @@ function startEditChore(id){
   const a = choreAssignee(c); if (a) $("#choreNow").value = a;
   $("#choreHead").textContent = "Aufgabe bearbeiten"; $("#choreDueLabel").textContent = "Nächstes Mal fällig";
   $("#choreWhoHead").textContent = "Reihum zwischen"; $("#choreNowWrap").hidden = false;
-  $("#choreSubmit").textContent = "Änderung speichern"; $("#choreCancel").hidden = false;
+  $("#choreSubmit").textContent = "Änderung speichern";
   render();
-  $("#choreForm").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"center"});
+  openSheet("chore");
   $("#choreTitle").focus({preventScroll:true});
 }
 function stopEditChore(){
@@ -697,7 +724,7 @@ function stopEditChore(){
   document.querySelectorAll('input[name="choreWho"]').forEach(i=>i.checked = true);
   $("#choreHead").textContent = "Neue Aufgabe"; $("#choreDueLabel").textContent = "Erstmals fällig";
   $("#choreWhoHead").textContent = "Reihum zwischen (erste Person beginnt)"; $("#choreNowWrap").hidden = true;
-  $("#choreSubmit").textContent = "Aufgabe anlegen"; $("#choreCancel").hidden = true;
+  $("#choreSubmit").textContent = "Aufgabe anlegen"; closeSheet("chore");
   render();
 }
 const DOTS = `<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2" fill="currentColor"/><circle cx="12" cy="12" r="2" fill="currentColor"/><circle cx="12" cy="19" r="2" fill="currentColor"/></svg>`;
@@ -714,9 +741,9 @@ function startEditExp(id){
   $("#expTitle").value = e.title; $("#expAmount").value = (e.amount/100).toFixed(2);
   if (member(e.paidBy)) $("#expPayer").value = e.paidBy;
   document.querySelectorAll('input[name="expWho"]').forEach(i=>i.checked = (e.split||[]).includes(i.value));
-  $("#expHead").textContent = "Ausgabe bearbeiten"; $("#expSubmit").textContent = "Änderung speichern"; $("#expCancel").hidden = false;
+  $("#expHead").textContent = "Ausgabe bearbeiten"; $("#expSubmit").textContent = "Änderung speichern";
   render();
-  $("#expForm").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"center"});
+  openSheet("exp");
   $("#expTitle").focus({preventScroll:true});
 }
 function stopEditExp(){
@@ -724,7 +751,7 @@ function stopEditExp(){
   $("#expTitle").value = ""; $("#expAmount").value = "";
   document.querySelectorAll('input[name="expWho"]').forEach(i=>i.checked = true);
   if (me && member(me)) $("#expPayer").value = me;
-  $("#expHead").textContent = "Ausgabe eintragen"; $("#expSubmit").textContent = "Eintragen"; $("#expCancel").hidden = true;
+  $("#expHead").textContent = "Ausgabe eintragen"; $("#expSubmit").textContent = "Eintragen"; closeSheet("exp");
   render();
 }
 
@@ -779,11 +806,38 @@ function openGoogle(n){
   document.body.appendChild(a); a.click(); a.remove();
 }
 
+/* ---------- Plus-Knopf und Eingabefenster ---------- */
+const FAB = { putzplan:["chore","Neue Aufgabe"], einkauf:["shop","Artikel hinzufügen"], kasse:["exp","Ausgabe eintragen"], pinnwand:["note","Etwas anpinnen"], wg:["member","Mitbewohner hinzufügen"] };
+const FIRST = { chore:"#choreTitle", shop:"#shopText", exp:"#expTitle", note:"#noteText", member:"#memberName" };
+function openSheet(kind){
+  const d = $("#sheet-"+kind); if (!d.open) d.showModal();
+  if (kind!=="exp" || !$("#expTitle").value) setTimeout(()=>$(FIRST[kind])?.focus(), 30);
+}
+function closeSheet(kind){ const d = $("#sheet-"+kind); if (d.open) d.close(); }
+document.querySelectorAll("dialog.sheet").forEach(d=>{
+  d.addEventListener("click", e=>{ if (e.target === d) d.close(); });            // Tipp neben das Fenster schließt es
+  d.addEventListener("close", ()=>{ if (d.id==="sheet-chore" && editingChore) stopEditChore(); if (d.id==="sheet-exp" && editingExp) stopEditExp(); });
+});
+document.addEventListener("click", e=>{ const b = e.target.closest("[data-close-sheet]"); if (b) b.closest("dialog").close(); });
+$("#fab").addEventListener("click", ()=>{
+  const v = FAB[location.hash.slice(1)]; if (!v) return;
+  if (v[0]==="chore" && editingChore) stopEditChore();
+  if (v[0]==="exp" && editingExp) stopEditExp();
+  openSheet(v[0]);
+});
+function syncFab(v){
+  const f = FAB[v]; const fab = $("#fab");
+  fab.hidden = !f; document.body.classList.toggle("has-fab", !!f);
+  if (f) fab.setAttribute("aria-label", f[1]);
+  document.querySelectorAll("dialog.sheet[open]").forEach(d=>d.close());
+}
+
 /* ---------- routing ---------- */
 const VIEWS = ["start","putzplan","einkauf","kasse","pinnwand","wg"];
 function route(){
   const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "start";
   document.querySelectorAll("section[data-view]").forEach(s=>s.hidden = s.dataset.view!==v);
+  syncFab(v);
   document.querySelectorAll("#tabs a").forEach(a=>a.getAttribute("href")==="#"+v ? a.setAttribute("aria-current","page") : a.removeAttribute("aria-current"));
 }
 addEventListener("hashchange", ()=>{ route(); scrollTo(0,0); });
@@ -798,7 +852,7 @@ function addMember(name){
   api.add("members",{name,color}); toast(`${name} ist eingezogen.`);
 }
 $("#onboardForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#onboardName").value); $("#onboardName").value=""; });
-$("#memberForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#memberName").value); $("#memberName").value=""; });
+$("#memberForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#memberName").value); $("#memberName").value=""; closeSheet("member"); });
 $("#nameForm").addEventListener("submit", e=>{ e.preventDefault(); api.setInfo({name:$("#wgNameInput").value.trim()}); toast("Gespeichert."); });
 $("#meSel").addEventListener("change", e=>{ me=e.target.value; ls.set("wg-me",me); render(); });
 
@@ -821,7 +875,7 @@ $("#choreForm").addEventListener("submit", e=>{
     api.update("chores", editingChore, {...row, idx: rotation.indexOf(now)}); stopEditChore(); return toast("Änderung gespeichert.");
   }
   api.add("chores",{...row, idx:0});
-  $("#choreTitle").value=""; toast("Aufgabe angelegt.");
+  stopEditChore(); toast("Aufgabe angelegt.");
 });
 $("#shopForm").addEventListener("submit", e=>{
   e.preventDefault();
@@ -833,7 +887,7 @@ $("#shopClear").addEventListener("click", ()=>{ S.shopping.filter(s=>s.done).for
 $("#shopToKasse").addEventListener("click", ()=>{
   const items = S.shopping.filter(s=>s.done).map(s=>s.text);
   $("#expTitle").value = ("Einkauf: "+items.join(", ")).slice(0,80);
-  location.hash="kasse"; setTimeout(()=>$("#expAmount").focus(),50);
+  location.hash="kasse"; setTimeout(()=>{ openSheet("exp"); $("#expAmount").focus(); },50);
 });
 $("#expForm").addEventListener("submit", e=>{
   e.preventDefault();
@@ -848,7 +902,7 @@ $("#expForm").addEventListener("submit", e=>{
   }
   api.add("expenses",row);
   if (row.title.startsWith("Einkauf: ")) S.shopping.filter(s=>s.done).forEach(s=>api.remove("shopping",s.id));
-  $("#expTitle").value=""; $("#expAmount").value=""; toast(`${money(amount)} eingetragen.`);
+  stopEditExp(); toast(`${money(amount)} eingetragen.`);
 });
 $("#expCancel").addEventListener("click", stopEditExp);
 $("#choreCancel").addEventListener("click", stopEditChore);
@@ -857,7 +911,7 @@ $("#noteForm").addEventListener("submit", e=>{
   const date = $("#noteDate").value||null, time = date ? ($("#noteTime").value||null) : null;
   if (!date && $("#noteTime").value) return toast("Für eine Uhrzeit brauchst du auch ein Datum.");
   api.add("notes",{text:$("#noteText").value.trim(), date, time, by:me||null});
-  $("#noteText").value=""; $("#noteDate").value=""; $("#noteTime").value=""; toast(date ? "Termin angepinnt." : "Angepinnt.");
+  $("#noteText").value=""; $("#noteDate").value=""; $("#noteTime").value=""; closeSheet("note"); toast(date ? "Termin angepinnt." : "Angepinnt.");
 });
 
 function askConfirm({title, text, ok, danger}){
@@ -945,7 +999,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.4";
+const APP_VERSION = "2026-11-07.6";
 let newVersion = null;
 async function checkUpdate(){
   try {
