@@ -563,7 +563,7 @@ async function connect(){
   const code = ls.get("wg-code");
   if (!code || !validCode(code)) { showGate(); return; }
   WG = code;
-  history.replaceState(null, "", `${location.pathname}?wg=${code}${location.hash}`);
+  syncUrl();
   const invite = `${location.origin}${location.pathname}?wg=${code}`;
   $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code;
   try { db = await firebaseDb(code); }
@@ -592,7 +592,14 @@ const mName = (id) => member(id)?.name || "Ehemalig";
 const mColor = (id) => member(id)?.color || "#999";
 const who = (id) => `<span class="who"><span class="magnet" style="background:${esc(mColor(id))}"></span>${esc(mName(id))}</span>`;
 const sortedMembers = () => [...S.members].sort((a,b)=>(a.created||0)-(b.created||0));
-let me = ls.get("wg-me") || "";
+// "Ich bin" liegt im Gerätespeicher UND in der Adresse (iOS-Home-Bildschirm-Apps verlieren den Speicher teils beim Schließen)
+let me = ls.get("wg-me") || new URLSearchParams(location.search).get("me") || "";
+if (me) ls.set("wg-me", me);
+function syncUrl(){
+  if (!WG) return;
+  const q = new URLSearchParams({ wg: WG }); if (me) q.set("me", me);
+  history.replaceState(null, "", `${location.pathname}?${q}${location.hash}`);
+}
 
 function dueChip(due){
   const d = diffDays(due);
@@ -649,7 +656,7 @@ function renderPickers(){
     $("#expPayer").innerHTML = ms.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
     sel.innerHTML = `<option value="">–</option>` + ms.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
   }
-  if (me && !member(me) && S.mode!=="loading" && ms.length) me = "";
+  if (me && !member(me) && dataReady && ms.length) { me = ""; ls.set("wg-me",""); syncUrl(); }
   sel.value = me;
   if (me && document.activeElement !== $("#expPayer")) $("#expPayer").value = me;
 }
@@ -1006,7 +1013,7 @@ function addMember(name){
 $("#onboardForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#onboardName").value); $("#onboardName").value=""; });
 $("#memberForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#memberName").value); $("#memberName").value=""; closeSheet("member"); });
 $("#nameForm").addEventListener("submit", e=>{ e.preventDefault(); api.setInfo({name:$("#wgNameInput").value.trim()}); toast("Gespeichert."); });
-$("#meSel").addEventListener("change", e=>{ me=e.target.value; ls.set("wg-me",me); render(); });
+$("#meSel").addEventListener("change", e=>{ me=e.target.value; ls.set("wg-me",me); syncUrl(); render(); });
 
 $("#choreDue").value = today();
 $("#choreForm").addEventListener("submit", e=>{
@@ -1219,7 +1226,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.13";
+const APP_VERSION = "2026-11-07.14";
 let newVersion = null;
 async function checkUpdate(){
   try {
@@ -1229,7 +1236,7 @@ async function checkUpdate(){
   } catch {}
 }
 $("#updateBtn").addEventListener("click", () => {
-  const q = new URLSearchParams(); if (WG) q.set("wg", WG); q.set("v", newVersion || Date.now());
+  const q = new URLSearchParams(); if (WG) q.set("wg", WG); if (me) q.set("me", me); q.set("v", newVersion || Date.now());
   location.replace(`${location.pathname}?${q}${location.hash}`);
 });
 setTimeout(checkUpdate, 3000);
