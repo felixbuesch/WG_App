@@ -317,7 +317,7 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
       <div>
         <h3>Schon eingeladen?</h3>
         <form class="row" id="gateForm">
-          <label class="f">WG-Code<input type="text" id="gateCode" placeholder="z. B. k7m2-x9pq-4tnw-hb3e" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+          <label class="f">WG-Code oder Einladungslink<input type="text" id="gateCode" placeholder="Code oder Einladungslink einfügen" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
           <button>Beitreten</button>
         </form>
       </div>
@@ -390,7 +390,7 @@ const FIREBASE_CONFIG = {
 };
 const FB_VERSION = "10.12.2";
 let WG = null;
-const normCode = (c) => String(c||"").trim().toLowerCase().replace(/\s+/g,"");
+const normCode = (c) => { c = String(c||"").trim(); const m = c.match(/[?&]wg=([a-z0-9-]+)/i); return (m ? m[1] : c).toLowerCase().replace(/\s+/g,""); };
 const validCode = (c) => /^[a-z0-9-]{12,40}$/.test(c);
 function newCode(){
   const abc = "abcdefghjkmnpqrstuvwxyz23456789", r = new Uint32Array(16); crypto.getRandomValues(r);
