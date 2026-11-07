@@ -162,6 +162,10 @@ dialog.sheet::backdrop{background:rgba(20,22,12,.45)}
 .sugg button{background:none;color:var(--fg);border:0;border-radius:0;font-weight:500;padding:7px 4px 7px 12px}
 .sugg button.x{color:var(--muted);padding:7px 10px 7px 6px;font-size:1rem;line-height:1}
 .sugg button mark{background:none;color:var(--accent);font-weight:700}
+a.offer{flex:none;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--line);border-radius:99px;color:var(--accent);text-decoration:none;font-size:.8rem;font-weight:600}
+a.offer:hover{background:var(--accent-soft)}
+a.offer:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+@media (max-width:359px){a.offer span{display:none}a.offer{padding:7px}}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px);display:flex;align-items:center;gap:12px}
 #toast[hidden]{display:none}
 #toast button{background:none;color:var(--bg);border:0;padding:2px 4px;font-weight:700;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
@@ -711,7 +715,7 @@ function render(){
   }, "Noch keine Aufgaben. Tippe auf +, um die erste anzulegen, z. B. Bad, Küche oder Müll.");
 
   // Einkauf
-  $("#shopList").innerHTML = L(openShop, s=>`<li><input type="checkbox" class="chk" data-shop="${s.id}" aria-label="${esc(s.text)} abhaken"><span class="grow">${esc(s.text)}${s.by?`<span class="meta"> · ${esc(mName(s.by))}</span>`:""}</span><button class="link" data-del="shopping:${s.id}" aria-label="${esc(s.text)} löschen">Löschen</button></li>`, "Die Liste ist leer.");
+  $("#shopList").innerHTML = L(openShop, s=>`<li><input type="checkbox" class="chk" data-shop="${s.id}" aria-label="${esc(s.text)} abhaken"><span class="grow">${esc(s.text)}${s.by?`<span class="meta"> · ${esc(mName(s.by))}</span>`:""}</span><a class="offer" href="${offerUrl(s.text)}" target="_blank" rel="noopener" aria-label="Angebote für ${esc(s.text)} auf Marktguru suchen">${TAG}<span>Angebote</span></a><button class="link" data-del="shopping:${s.id}" aria-label="${esc(s.text)} löschen">Löschen</button></li>`, "Die Liste ist leer.");
   $("#shopDoneWrap").hidden = !doneShop.length;
   $("#shopDone").innerHTML = doneShop.map(s=>`<li class="done"><input type="checkbox" class="chk" checked data-shop="${s.id}" aria-label="${esc(s.text)} zurück auf die Liste"><span class="grow">${esc(s.text)}</span></li>`).join("");
 
@@ -1024,6 +1028,10 @@ $("#choreForm").addEventListener("submit", e=>{
   api.add("chores",{...row, idx:0});
   stopEditChore(); toast("Aufgabe angelegt.");
 });
+/* ---------- Angebote auf Marktguru ---------- */
+const TAG = `<svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9-9-9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.6" fill="currentColor"/></svg>`;
+const offerUrl = (t) => "https://www.marktguru.de/search/" + encodeURIComponent(String(t).trim());
+
 /* ---------- Einkaufsliste: Vorschläge aus früheren Einträgen ---------- */
 const norm = (t) => t.trim().toLocaleLowerCase("de-DE");
 async function saveHistory(items){
@@ -1192,7 +1200,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.11";
+const APP_VERSION = "2026-11-07.12";
 let newVersion = null;
 async function checkUpdate(){
   try {
