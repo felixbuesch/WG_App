@@ -274,16 +274,41 @@ dialog.sheet::backdrop{background:rgba(20,22,12,.45)}
           <button>Speichern</button>
         </form>
         <p class="hint" style="margin-top:14px" id="syncHint"></p>
-      </div>
-      <div class="panel" id="invitePanel" hidden>
-        <h2>Mitbewohner einladen</h2>
-        <p class="hint">Schick diesen Link an alle in der WG. Wer ihn öffnet, ist direkt drin.</p>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
-          <input type="text" id="inviteLink" readonly style="flex:1 1 220px" aria-label="Einladungslink">
-          <button id="copyInvite">Link kopieren</button>
-        </div>
-        <p class="hint" style="margin-top:10px">WG-Code: <span class="money" id="wgCodeShow"></span></p>
         <button class="ghost small" id="leaveWg" style="margin-top:12px">Auf diesem Gerät abmelden</button>
+      </div>
+      <div class="panel" id="adminPanel" hidden>
+        <h2>Verwaltung</h2>
+        <div id="adminSetup" hidden>
+          <p class="hint" id="adminSetupHint">Leg ein Passwort fest, das nur du kennst. Damit schaltest du das Einladen und den Wechsel des WG-Codes frei.</p>
+          <form class="stack" id="adminSetForm" style="margin-top:10px">
+            <label class="f">Neuer Code<input type="password" id="adminPw1" minlength="4" required autocomplete="new-password"></label>
+            <label class="f">Code wiederholen<input type="password" id="adminPw2" minlength="4" required autocomplete="new-password"></label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px"><button>Code speichern</button><button type="button" class="ghost" id="adminSetCancel" hidden>Abbrechen</button></div>
+          </form>
+        </div>
+        <div id="adminLogin" hidden>
+          <p class="hint">Gib den Verwaltungscode ein, um Mitbewohner einzuladen oder den WG-Code zu erneuern.</p>
+          <form class="row" id="adminLoginForm" style="margin-top:10px">
+            <label class="f">Verwaltungscode<input type="password" id="adminPw" inputmode="numeric" required autocomplete="current-password"></label>
+            <button>Entsperren</button>
+          </form>
+        </div>
+        <div id="adminTools" hidden>
+          <h3>Mitbewohner einladen</h3>
+          <p class="hint">Schick diesen Link an alle in der WG. Wer ihn öffnet, ist direkt drin.</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+            <input type="text" id="inviteLink" readonly style="flex:1 1 220px" aria-label="Einladungslink">
+            <button id="copyInvite">Link kopieren</button>
+          </div>
+          <p class="hint" style="margin-top:8px">WG-Code: <span class="money" id="wgCodeShow"></span></p>
+          <h3 style="margin-top:20px">WG-Code erneuern</h3>
+          <p class="hint">Erzeugt einen neuen Code und zieht alle Daten dorthin um. Alle anderen Geräte werden abgemeldet und brauchen den neuen Einladungslink. Dieses Gerät bleibt angemeldet.</p>
+          <button class="ghost" id="newCodeBtn" style="margin-top:10px">Neuen WG-Code erzeugen</button>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:20px;padding-top:14px;border-top:1px solid var(--line)">
+            <button class="ghost small" id="adminChangePw">Verwaltungscode ändern</button>
+            <button class="ghost small" id="adminLock">Verwaltung sperren</button>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -466,10 +491,29 @@ function newCode(){
   const abc = "abcdefghjkmnpqrstuvwxyz23456789", r = new Uint32Array(16); crypto.getRandomValues(r);
   return [...r].map(n=>abc[n%abc.length]).join("").match(/.{4}/g).join("-");
 }
+let FB = null;
+async function fb(){
+  if (!FB) {
+    const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-app.js`);
+    const F = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-firestore.js`);
+    FB = { F, fs: F.getFirestore(initializeApp(FIREBASE_CONFIG)) };
+  }
+  return FB;
+}
+// Alle Dokumente zu einem neuen Code kopieren, dann den alten leeren und als "moved" markieren
+async function moveWg(oldCode, newCode, docs){
+  const { F, fs } = await fb();
+  const chunks = (a) => { const out=[]; for (let i=0;i<a.length;i+=400) out.push(a.slice(i,i+400)); return out; };
+  for (const part of chunks(docs)) { const b = F.writeBatch(fs); part.forEach(d=>b.set(F.doc(fs,`wgs/${newCode}/${d.col}/${d.id}`), d.data)); await b.commit(); }
+  try {
+    const old = docs.filter(d=>!(d.col==="wg" && d.id==="info"));
+    for (const part of chunks(old)) { const b = F.writeBatch(fs); part.forEach(d=>b.delete(F.doc(fs,`wgs/${oldCode}/${d.col}/${d.id}`))); await b.commit(); }
+    await F.setDoc(F.doc(fs,`wgs/${oldCode}/wg/info`), {moved:true});
+    return "ok";
+  } catch { return "old-not-cleared"; }
+}
 async function firebaseDb(code){
-  const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-app.js`);
-  const F = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-firestore.js`);
-  const fs = F.getFirestore(initializeApp(FIREBASE_CONFIG));
+  const { F, fs } = await fb();
   const base = `wgs/${code}/`;
   const wrapDoc = (path) => { const r = F.doc(fs, base+path); return {
     set: (d) => F.setDoc(r, d), update: (d) => F.updateDoc(r, d), delete: () => F.deleteDoc(r),
@@ -512,20 +556,22 @@ async function connect(){
   WG = code;
   history.replaceState(null, "", `${location.pathname}?wg=${code}${location.hash}`);
   const invite = `${location.origin}${location.pathname}?wg=${code}`;
-  $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code; $("#invitePanel").hidden = false;
+  $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code;
   try { db = await firebaseDb(code); }
   catch { setBanner("Die Datenbank konnte nicht geladen werden. Prüf deine Internetverbindung und lade die Seite neu."); return; }
   S.mode="db";
   const seen = new Set();
-  const timer = setTimeout(()=>{ if (seen.size < COLS.length+1) setBanner("Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell."); }, 10000);
-  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===COLS.length+1){ clearTimeout(timer); setBanner(""); } } };
+  const NEED = COLS.length + 2;
+  const timer = setTimeout(()=>{ if (seen.size < NEED) setBanner("Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell."); }, 10000);
+  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===NEED){ dataReady = true; clearTimeout(timer); setBanner(""); } } };
   const fail = (e) => { clearTimeout(timer); setBanner(e.code==="permission-denied" ? "Kein Zugriff auf die Datenbank. Sind die Firestore-Regeln eingerichtet?" : "Die gemeinsamen Daten konnten nicht geladen werden. Lade die Seite neu."); };
   for (const c of COLS) db.collection(c).onSnapshot(snap => { S[c] = snap.docs.map(d=>({id:d.id,...d.data()})); ok(c,snap); render(); }, fail);
   db.doc("wg/info").onSnapshot(snap => {
     S.info = snap.exists ? snap.data() : {};
-    if (S.info.moved) { try { localStorage.removeItem("wg-code"); } catch {} history.replaceState(null, "", location.pathname); $("#invitePanel").hidden = true; $("#gateMoved").hidden = false; showGate(); return; }
+    if (S.info.moved && !migrating) { try { localStorage.removeItem("wg-code"); } catch {} history.replaceState(null, "", location.pathname); $("#adminPanel").hidden = true; $("#gateMoved").hidden = false; showGate(); return; }
     ok("info",snap); render();
   }, fail);
+  db.doc("wg/admin").onSnapshot(snap => { S.admin = snap.exists ? snap.data() : null; S.adminLoaded = true; ok("admin",snap); render(); }, fail);
   render();
 }
 function setBanner(t){ const b=$("#statusBanner"); b.textContent=t; b.hidden=!t; }
@@ -605,6 +651,7 @@ function render(){
   $("#appTitle").setAttribute("content", appName); document.title = appName;
   if (document.activeElement !== $("#wgNameInput")) $("#wgNameInput").value = S.info.name || "";
   renderPickers();
+  renderAdmin();
   const ms = sortedMembers();
   const chores = [...S.chores].sort((a,b)=>a.due.localeCompare(b.due));
   const openShop = S.shopping.filter(s=>!s.done).sort((a,b)=>(a.created||0)-(b.created||0));
@@ -630,7 +677,7 @@ function render(){
   $("#summary").innerHTML = S.mode==="loading" ? "" : `
     <a class="stat ${myTasks?"alert":""}" href="#putzplan"><b>${myTasks}</b><span>${me?"Aufgaben für dich fällig":"Aufgaben heute fällig"}</span></a>
     <a class="stat" href="#einkauf"><b>${openShop.length}</b><span>Sachen auf der Einkaufsliste</span></a>
-    <a class="stat" href="#kasse"><b class="money" style="font-family:var(--display)">${me?money(myBal):money(S.expenses.filter(e=>!e.settle).reduce((s,e)=>s+e.amount,0))}</b><span>${me?(myBal>=0?"bekommst du zurück":"schuldest du der WG"):"Ausgaben gesamt"}</span></a>
+    <a class="stat" href="#kasse"><b class="money" style="font-family:var(--display);color:${!me||myBal===0?"var(--fg)":myBal>0?"var(--good)":"var(--bad)"}">${me?money(Math.abs(myBal)):money(S.expenses.filter(e=>!e.settle).reduce((s,e)=>s+e.amount,0))}</b><span>${me?(myBal>0?"bekommst du zurück":myBal<0?"musst du noch zahlen":"Du bist quitt"):"Ausgaben gesamt. Wähl oben „Ich bin“ für deinen Stand"}</span></a>
     <a class="stat" href="#pinnwand"><b>${events.length}</b><span>anstehende Termine</span></a>`;
 
   const loading = `<li><p class="hint">Lade …</p></li>`;
@@ -805,6 +852,69 @@ function openGoogle(n){
   const a = document.createElement("a"); a.href = `https://calendar.google.com/calendar/render?${q}`; a.target = "_blank"; a.rel = "noopener";
   document.body.appendChild(a); a.click(); a.remove();
 }
+
+/* ---------- Verwaltung (Passwort) ---------- */
+let dataReady = false, migrating = false, changingPw = false;
+const hex = (buf) => [...new Uint8Array(buf)].map(b=>b.toString(16).padStart(2,"0")).join("");
+async function pwHash(pw, salt, iter){
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]);
+  return hex(await crypto.subtle.deriveBits({name:"PBKDF2", salt:new TextEncoder().encode(salt), iterations:iter, hash:"SHA-256"}, key, 256));
+}
+// Standard-Verwaltungscode (nur der Hash steht im Code). Wird ersetzt, sobald jemand mit Zugang das Passwort ändert.
+const DEFAULT_ADMIN = { salt:"wg-planer-standard", iter:210000, hash:"4887885a6eb59917d376f1635090a02f75e44ec6a8eaa61a0b0f9bcbeca5ed26" };
+const adminCfg = () => (S.admin && S.admin.hash) ? S.admin : DEFAULT_ADMIN;
+const isAdmin = () => ls.get("wg-admin") === adminCfg().hash;
+function renderAdmin(){
+  const p = $("#adminPanel"); p.hidden = S.mode!=="db" || !S.adminLoaded; if (p.hidden) return;
+  const adm = isAdmin();
+  $("#adminSetup").hidden = !(adm && changingPw);
+  $("#adminSetCancel").hidden = !changingPw;
+  $("#adminSetupHint").textContent = "Leg einen neuen Verwaltungscode fest. Er gilt dann für alle Geräte.";
+  $("#adminLogin").hidden = adm;
+  $("#adminTools").hidden = !adm || changingPw;
+}
+$("#adminSetForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const a = $("#adminPw1").value, b = $("#adminPw2").value;
+  if (a.length < 4) return toast("Der Code braucht mindestens 4 Zeichen.");
+  if (a !== b) return toast("Die beiden Passwörter sind nicht gleich.");
+  if (!isAdmin()) return toast("Entsperre zuerst die Verwaltung.");
+  const salt = hex(crypto.getRandomValues(new Uint8Array(16))), iter = 210000;
+  const hash = await pwHash(a, salt, iter);
+  try { await db.doc("wg/admin").set({salt, hash, iter, changed: Date.now()}); } catch(err){ return writeErr(err); }
+  ls.set("wg-admin", hash); changingPw = false;
+  $("#adminPw1").value = ""; $("#adminPw2").value = "";
+  toast("Neuer Verwaltungscode gespeichert."); render();
+});
+$("#adminSetCancel").addEventListener("click", () => { changingPw = false; $("#adminPw1").value = ""; $("#adminPw2").value = ""; render(); });
+$("#adminLoginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const a = adminCfg();
+  const hash = await pwHash($("#adminPw").value, a.salt, a.iter || 210000);
+  $("#adminPw").value = "";
+  if (hash !== a.hash) return toast("Falscher Code.");
+  ls.set("wg-admin", hash); toast("Verwaltung entsperrt."); render();
+});
+$("#adminLock").addEventListener("click", () => { try { localStorage.removeItem("wg-admin"); } catch {} toast("Verwaltung gesperrt."); render(); });
+$("#adminChangePw").addEventListener("click", () => { changingPw = true; render(); $("#adminPw1").focus(); });
+$("#newCodeBtn").addEventListener("click", async () => {
+  if (!isAdmin()) return;
+  if (!dataReady) return toast("Die Daten werden noch geladen. Versuch es gleich noch mal.");
+  const ok = await askConfirm({ title:"Neuen WG-Code erzeugen?", text:"Alle anderen Geräte werden abgemeldet und brauchen den neuen Einladungslink. Dieses Gerät bleibt angemeldet.", ok:"Code erneuern", danger:true });
+  if (!ok) return;
+  const btn = $("#newCodeBtn"), next = newCode();
+  const docs = [];
+  for (const c of COLS) for (const row of S[c]) { const { id, ...data } = row; docs.push({ col:c, id, data }); }
+  docs.push({ col:"wg", id:"info", data:{ ...S.info } });
+  if (S.admin) docs.push({ col:"wg", id:"admin", data:{ ...S.admin } });
+  migrating = true; btn.disabled = true; btn.textContent = "Wird umgezogen …";
+  let res;
+  try { res = await moveWg(WG, next, docs); }
+  catch { migrating = false; btn.disabled = false; btn.textContent = "Neuen WG-Code erzeugen"; return toast("Das hat nicht geklappt. Es wurde nichts geändert."); }
+  ls.set("wg-code", next);
+  ls.set("wg-moved-note", res === "ok" ? "ok" : "partial");
+  location.replace(`${location.pathname}?wg=${next}#wg`);
+});
 
 /* ---------- Plus-Knopf und Eingabefenster ---------- */
 const FAB = { putzplan:["chore","Neue Aufgabe"], einkauf:["shop","Artikel hinzufügen"], kasse:["exp","Ausgabe eintragen"], pinnwand:["note","Etwas anpinnen"], wg:["member","Mitbewohner hinzufügen"] };
@@ -999,7 +1109,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.6";
+const APP_VERSION = "2026-11-07.9";
 let newVersion = null;
 async function checkUpdate(){
   try {
@@ -1017,6 +1127,8 @@ setInterval(checkUpdate, 15*60*1000);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
 
 route(); render(); connect();
+{ const n = ls.get("wg-moved-note"); if (n) { try { localStorage.removeItem("wg-moved-note"); } catch {}
+  setTimeout(()=>toast(n==="ok" ? "Neuer WG-Code ist aktiv. Schick den neuen Einladungslink an deine Mitbewohner." : "Neuer Code ist aktiv, aber der alte konnte nicht ganz geleert werden. Sag mir Bescheid."), 600); } }
 })();
 </script>
 

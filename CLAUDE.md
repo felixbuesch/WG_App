@@ -11,8 +11,8 @@ UI-Sprache: Deutsch.
   Format: `JJJJ-MM-TT.N`. Nur dann sehen installierte Apps den „Aktualisieren“-Hinweis.
 - Vorhandene Daten in Firestore müssen weiter funktionieren (Felder nur ergänzen, nicht umbenennen).
 
-## WG-Code ändern (nur auf Anfrage von Felix)
-Es gibt absichtlich keinen Button in der App. Code-Wechsel läuft über `tools/wg_code.py`:
-- `python3 tools/wg_code.py show <code>` zählt die Einträge
-- `python3 tools/wg_code.py change <alter-code> [neuer-code]` kopiert alles, leert den alten Code und markiert ihn als `moved`
-Den neuen Einladungslink nur Felix im Chat geben, nirgends committen.
+## Verwaltung / WG-Code ändern
+- Im Bereich „WG“ schaltet ein Verwaltungscode Einladen und „Neuen WG-Code erzeugen“ frei.
+  Der Standardcode steht nur als PBKDF2-Hash (`DEFAULT_ADMIN`) in `index.html`, niemals im Klartext committen.
+  Ändert jemand den Code in der App, liegt der neue Hash in `wgs/<code>/wg/admin`.
+- Notlösung ohne App: `tools/wg_code.py` (`show` / `change`). Den neuen Einladungslink nur Felix im Chat geben.
