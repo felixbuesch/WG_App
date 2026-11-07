@@ -949,8 +949,38 @@ function route(){
   document.querySelectorAll("section[data-view]").forEach(s=>s.hidden = s.dataset.view!==v);
   syncFab(v);
   document.querySelectorAll("#tabs a").forEach(a=>a.getAttribute("href")==="#"+v ? a.setAttribute("aria-current","page") : a.removeAttribute("aria-current"));
+  const cur = document.querySelector('#tabs a[aria-current="page"]');
+  if (cur) { const nav = $("#tabs"); nav.scrollTo({ left: cur.offsetLeft - (nav.clientWidth - cur.offsetWidth)/2, behavior: "smooth" }); }
+  if (slideDir && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    const sec = document.querySelector(`section[data-view="${v}"]`);
+    sec.animate([{ transform:`translateX(${slideDir*28}px)`, opacity:.35 }, { transform:"none", opacity:1 }], { duration:200, easing:"ease-out" });
+  }
+  slideDir = 0;
 }
 addEventListener("hashchange", ()=>{ route(); scrollTo(0,0); });
+
+/* ---------- Wischen zwischen den Bereichen ---------- */
+let slideDir = 0, swipe = null;
+document.addEventListener("touchstart", e => {
+  swipe = null;
+  if (e.touches.length !== 1 || document.body.classList.contains("gated") || document.querySelector("dialog[open]")) return;
+  const t = e.touches[0];
+  if (t.clientX < 24 || t.clientX > innerWidth - 24) return;                       // Rand frei lassen für Zurück-Geste des Handys
+  if (e.target.closest("input, textarea, select, nav, .menu, .bar")) return;
+  swipe = { x: t.clientX, y: t.clientY, time: Date.now() };
+}, { passive: true });
+document.addEventListener("touchend", e => {
+  if (!swipe) return;
+  const t = e.changedTouches[0], dx = t.clientX - swipe.x, dy = t.clientY - swipe.y, dt = Date.now() - swipe.time;
+  swipe = null;
+  if (dt > 700 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+  if (getSelection && String(getSelection()).length) return;
+  const cur = VIEWS.indexOf(VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "start");
+  const next = cur + (dx < 0 ? 1 : -1);
+  if (next < 0 || next >= VIEWS.length) return;
+  slideDir = dx < 0 ? 1 : -1;
+  location.hash = VIEWS[next];
+}, { passive: true });
 
 /* ---------- events ---------- */
 const checked = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i=>i.value);
@@ -1109,7 +1139,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.9";
+const APP_VERSION = "2026-11-07.10";
 let newVersion = null;
 async function checkUpdate(){
   try {
