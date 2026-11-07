@@ -158,6 +158,10 @@ dialog.sheet::backdrop{background:rgba(20,22,12,.45)}
 @media (prefers-reduced-motion:no-preference){dialog.sheet[open]{animation:sheetIn .22s ease-out}@keyframes sheetIn{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}}
 .sheethead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
 .gated .fab{display:none!important}
+.sugg{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:99px;background:var(--accent-soft);overflow:hidden}
+.sugg button{background:none;color:var(--fg);border:0;border-radius:0;font-weight:500;padding:7px 4px 7px 12px}
+.sugg button.x{color:var(--muted);padding:7px 10px 7px 6px;font-size:1rem;line-height:1}
+.sugg button mark{background:none;color:var(--accent);font-weight:700}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px);display:flex;align-items:center;gap:12px}
 #toast[hidden]{display:none}
 #toast button{background:none;color:var(--bg);border:0;padding:2px 4px;font-weight:700;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
@@ -373,9 +377,10 @@ dialog.sheet::backdrop{background:rgba(20,22,12,.45)}
   <dialog class="sheet" id="sheet-shop" aria-labelledby="shopHead">
     <div class="sheethead"><h2 id="shopHead">Auf die Einkaufsliste</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
       <form class="row" id="shopForm">
-        <label class="f" style="flex-basis:220px">Artikel<input type="text" id="shopText" placeholder="z. B. Spülmittel, Klopapier" required maxlength="80"></label>
+        <label class="f" style="flex-basis:220px">Artikel<input type="text" id="shopText" placeholder="z. B. Spülmittel, Klopapier" required maxlength="80" autocomplete="off"></label>
         <button>Hinzufügen</button>
       </form>
+    <div class="pickers" id="shopSuggest" aria-label="Vorschläge" style="margin-top:10px"></div>
     <p class="hint" style="margin-top:8px">Mehrere Sachen auf einmal mit Komma trennen. Das Fenster bleibt offen, bis du es schließt.</p>
   </dialog>
   <dialog class="sheet" id="sheet-exp" aria-labelledby="expHead">
@@ -442,7 +447,7 @@ function toast(msg, action){
 }
 
 /* ---------- Data layer: shared db when available, otherwise this device only ---------- */
-const S = { mode:"loading", members:[], chores:[], shopping:[], expenses:[], notes:[], info:{} };
+const S = { mode:"loading", members:[], chores:[], shopping:[], expenses:[], notes:[], info:{}, history:[] };
 let db = null, readOnly = false;
 
 function saveLocal(){ ls.set("wg-local", JSON.stringify({members:S.members,chores:S.chores,shopping:S.shopping,expenses:S.expenses,notes:S.notes,info:S.info})); }
@@ -571,6 +576,7 @@ async function connect(){
     if (S.info.moved && !migrating) { try { localStorage.removeItem("wg-code"); } catch {} history.replaceState(null, "", location.pathname); $("#adminPanel").hidden = true; $("#gateMoved").hidden = false; showGate(); return; }
     ok("info",snap); render();
   }, fail);
+  db.doc("wg/shophistory").onSnapshot(snap => { S.history = (snap.exists && snap.data().items) || []; renderSuggest(); }, ()=>{});
   db.doc("wg/admin").onSnapshot(snap => { S.admin = snap.exists ? snap.data() : null; S.adminLoaded = true; ok("admin",snap); render(); }, fail);
   render();
 }
@@ -907,6 +913,7 @@ $("#newCodeBtn").addEventListener("click", async () => {
   for (const c of COLS) for (const row of S[c]) { const { id, ...data } = row; docs.push({ col:c, id, data }); }
   docs.push({ col:"wg", id:"info", data:{ ...S.info } });
   if (S.admin) docs.push({ col:"wg", id:"admin", data:{ ...S.admin } });
+  if (S.history.length) docs.push({ col:"wg", id:"shophistory", data:{ items: S.history } });
   migrating = true; btn.disabled = true; btn.textContent = "Wird umgezogen …";
   let res;
   try { res = await moveWg(WG, next, docs); }
@@ -1017,11 +1024,57 @@ $("#choreForm").addEventListener("submit", e=>{
   api.add("chores",{...row, idx:0});
   stopEditChore(); toast("Aufgabe angelegt.");
 });
+/* ---------- Einkaufsliste: Vorschläge aus früheren Einträgen ---------- */
+const norm = (t) => t.trim().toLocaleLowerCase("de-DE");
+async function saveHistory(items){
+  S.history = items;
+  if (S.mode==="db") { try { await db.doc("wg/shophistory").set({ items }); } catch(e){ /* Vorschläge sind nicht kritisch */ } }
+}
+function recordHistory(texts){
+  const list = S.history.map(h=>({...h})), now = Date.now();
+  for (const t of texts) {
+    const h = list.find(x=>norm(x.t)===norm(t));
+    if (h) { h.n = (h.n||1) + 1; h.last = now; h.t = t; } else list.push({ t, n:1, last:now });
+  }
+  list.sort((a,b)=>b.last-a.last);
+  saveHistory(list.slice(0,300));
+}
+function suggestions(q){
+  q = norm(q); if (!q) return [];
+  const onList = new Set(S.shopping.filter(x=>!x.done).map(x=>norm(x.text)));
+  const known = [...S.history];   // auch abgehakte Artikel im Korb zählen als bekannt
+  for (const x of S.shopping) if (!known.some(h=>norm(h.t)===norm(x.text))) known.push({ t:x.text, n:1, last:x.created||0 });
+  const pool = known.filter(h=>!onList.has(norm(h.t)) && norm(h.t)!==q);
+  const starts = pool.filter(h=>norm(h.t).startsWith(q) || norm(h.t).split(/\s+/).some(w=>w.startsWith(q)));
+  const rest = pool.filter(h=>!starts.includes(h) && norm(h.t).includes(q));
+  const byUse = (a,b)=>(b.n||1)-(a.n||1) || b.last-a.last;
+  return [...starts.sort(byUse), ...rest.sort(byUse)].slice(0,8);
+}
+function renderSuggest(){
+  const box = $("#shopSuggest"); if (!box) return;
+  const parts = $("#shopText").value.split(","), last = parts[parts.length-1];
+  const list = suggestions(last), q = norm(last);
+  box.innerHTML = list.map(h=>{
+    const t = h.t, i = norm(t).indexOf(q);
+    const label = i>=0 ? esc(t.slice(0,i)) + "<mark>" + esc(t.slice(i,i+q.length)) + "</mark>" + esc(t.slice(i+q.length)) : esc(t);
+    return `<span class="sugg"><button type="button" data-sugg="${esc(t)}">${label}</button><button type="button" class="x" data-sugg-del="${esc(t)}" aria-label="${esc(t)} aus den Vorschlägen entfernen">×</button></span>`;
+  }).join("");
+}
+$("#shopText").addEventListener("input", renderSuggest);
+$("#shopSuggest").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.suggDel !== undefined) { saveHistory(S.history.filter(h=>norm(h.t)!==norm(b.dataset.suggDel))); renderSuggest(); $("#shopText").focus(); return; }
+  const parts = $("#shopText").value.split(","); parts[parts.length-1] = b.dataset.sugg;
+  $("#shopText").value = parts.join(", ");
+  $("#shopForm").requestSubmit();
+});
+
 $("#shopForm").addEventListener("submit", e=>{
   e.preventDefault();
   const items = $("#shopText").value.split(",").map(s=>s.trim()).filter(Boolean);
   items.forEach(text=>api.add("shopping",{text,done:false,by:me||null}));
-  $("#shopText").value=""; $("#shopText").focus();
+  if (items.length) recordHistory(items);
+  $("#shopText").value=""; renderSuggest(); $("#shopText").focus();
 });
 $("#shopClear").addEventListener("click", ()=>{ S.shopping.filter(s=>s.done).forEach(s=>api.remove("shopping",s.id)); });
 $("#shopToKasse").addEventListener("click", ()=>{
@@ -1139,7 +1192,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-07.10";
+const APP_VERSION = "2026-11-07.11";
 let newVersion = null;
 async function checkUpdate(){
   try {
