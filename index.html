@@ -3,10 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#5a6b1e">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="WG Planer" id="appTitle">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
 </head>
 <body>
-<title>WG-Planer</title>
+<title>WG Planer</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,22 +22,22 @@
 <style>
 /* Layout: a fridge door — sticky header with tabs, then one working view; members are colored magnets */
 :root{
-  --bg:#eef0ec; --surface:#ffffff; --surface-2:#f6f7f4; --line:#d9ddd5;
-  --fg:#1c211d; --muted:#5f6862; --accent:#2747d6; --accent-ink:#ffffff; --accent-soft:#e3e8fc;
-  --good:#1d7a4a; --good-soft:#dcf0e4; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4231c; --bad-soft:#f9dfdc;
+  --bg:#eff0e8; --surface:#ffffff; --surface-2:#f6f7f0; --line:#d9dccb;
+  --fg:#1f2117; --muted:#61654f; --accent:#5a6b1e; --accent-ink:#ffffff; --accent-soft:#e8ecd2;
+  --good:#0f7a63; --good-soft:#d6efe8; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4231c; --bad-soft:#f9dfdc;
   --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --body:"Figtree", "Segoe UI", system-ui, sans-serif;
   --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
   --r:10px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#141715; --surface:#1d211e; --surface-2:#232825; --line:#333a35;
-  --fg:#e9ece8; --muted:#9aa49d; --accent:#8ea2ff; --accent-ink:#0f1430; --accent-soft:#252c4d;
-  --good:#6fd39d; --good-soft:#1b3326; --warn:#f0b259; --warn-soft:#3a2d17; --bad:#ff8a80; --bad-soft:#3f1f1c; color-scheme:dark}}
+  --bg:#15160f; --surface:#1e2017; --surface-2:#25281d; --line:#363a2a;
+  --fg:#eceee2; --muted:#a3a78f; --accent:#b8c76a; --accent-ink:#1b2006; --accent-soft:#2d3319;
+  --good:#62d4b8; --good-soft:#163229; --warn:#f0b259; --warn-soft:#3a2d17; --bad:#ff8a80; --bad-soft:#3f1f1c; color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#141715; --surface:#1d211e; --surface-2:#232825; --line:#333a35;
-  --fg:#e9ece8; --muted:#9aa49d; --accent:#8ea2ff; --accent-ink:#0f1430; --accent-soft:#252c4d;
-  --good:#6fd39d; --good-soft:#1b3326; --warn:#f0b259; --warn-soft:#3a2d17; --bad:#ff8a80; --bad-soft:#3f1f1c; color-scheme:dark}
+  --bg:#15160f; --surface:#1e2017; --surface-2:#25281d; --line:#363a2a;
+  --fg:#eceee2; --muted:#a3a78f; --accent:#b8c76a; --accent-ink:#1b2006; --accent-soft:#2d3319;
+  --good:#62d4b8; --good-soft:#163229; --warn:#f0b259; --warn-soft:#3a2d17; --bad:#ff8a80; --bad-soft:#3f1f1c; color-scheme:dark}
 
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body)}
@@ -418,18 +426,18 @@ let leaveArmed = false;
 $("#leaveWg").addEventListener("click", e => {
   if (!leaveArmed) { leaveArmed = true; e.target.textContent = "Wirklich abmelden? Nochmal tippen"; setTimeout(()=>{ leaveArmed=false; e.target.textContent="Auf diesem Gerät abmelden"; }, 4000); return; }
   try { localStorage.removeItem("wg-code"); } catch {}
-  location.reload();
+  location.replace(location.pathname);
 });
 
 async function connect(){
   const fromUrl = new URLSearchParams(location.search).get("wg");
   if (fromUrl !== null) {
     const c = normCode(fromUrl); if (validCode(c)) ls.set("wg-code", c);
-    history.replaceState(null, "", location.pathname + location.hash);
   }
   const code = ls.get("wg-code");
   if (!code || !validCode(code)) { showGate(); return; }
   WG = code;
+  history.replaceState(null, "", `${location.pathname}?wg=${code}${location.hash}`);
   const invite = `${location.origin}${location.pathname}?wg=${code}`;
   $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code; $("#invitePanel").hidden = false;
   try { db = await firebaseDb(code); }
@@ -516,6 +524,8 @@ function renderPickers(){
 function render(){
   const name = S.info.name || "Unsere WG";
   $("#wgName").textContent = name;
+  const appName = (S.info.name ? S.info.name : "WG") + " Planer";
+  $("#appTitle").setAttribute("content", appName); document.title = appName;
   if (document.activeElement !== $("#wgNameInput")) $("#wgNameInput").value = S.info.name || "";
   renderPickers();
   const ms = sortedMembers();
