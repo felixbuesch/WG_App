@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Jede WG liegt unter /wgs/<WG-Code>/...
+    // Wer den Code kennt, darf lesen und schreiben. Die Liste aller WGs ist gesperrt.
+    match /wgs/{code}/{rest=**} {
+      allow read, write: if code.size() >= 12 && code.matches('^[a-z0-9-]+$');
+    }
+  }
+}

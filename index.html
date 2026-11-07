@@ -114,6 +114,7 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
 .datebox span{display:block;font:500 .64rem/1.6 var(--mono);text-transform:uppercase;background:var(--accent);color:var(--accent-ink)}
 
 .banner{font-size:.85rem;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}
+.gated section[data-view],.gated nav,.gated .me{display:none!important}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){ul.list > li{transition:background .2s}}
 </style>
@@ -279,8 +280,38 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
         </form>
         <p class="hint" style="margin-top:14px" id="syncHint"></p>
       </div>
+      <div class="panel" id="invitePanel" hidden>
+        <h2>Mitbewohner einladen</h2>
+        <p class="hint">Schick diesen Link an alle in der WG. Wer ihn öffnet, ist direkt drin.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+          <input type="text" id="inviteLink" readonly style="flex:1 1 220px" aria-label="Einladungslink">
+          <button id="copyInvite">Link kopieren</button>
+        </div>
+        <p class="hint" style="margin-top:10px">WG-Code: <span class="money" id="wgCodeShow"></span></p>
+        <button class="ghost small" id="leaveWg" style="margin-top:12px">Auf diesem Gerät abmelden</button>
+      </div>
     </div>
   </section>
+
+  <!-- ZUGANG -->
+  <div class="panel" id="gate" hidden>
+    <h2>Willkommen beim WG-Planer</h2>
+    <p class="hint">Jede WG hat einen eigenen Code. Wer den Code kennt, kann eure Daten sehen und bearbeiten. Gebt ihn also nur an Mitbewohner weiter.</p>
+    <div class="grid2" style="margin-top:16px">
+      <div>
+        <h3>Neue WG</h3>
+        <p class="hint">Erstellt einen neuen Code. Den Einladungslink findest du danach im Bereich „WG“.</p>
+        <button id="gateNew" style="margin-top:10px">WG gründen</button>
+      </div>
+      <div>
+        <h3>Schon eingeladen?</h3>
+        <form class="row" id="gateForm">
+          <label class="f">WG-Code<input type="text" id="gateCode" placeholder="z. B. k7m2-x9pq-4tnw-hb3e" required autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+          <button>Beitreten</button>
+        </form>
+      </div>
+    </div>
+  </div>
 </main>
 <div id="toast" role="status" hidden></div>
 
@@ -312,7 +343,8 @@ function saveLocal(){ ls.set("wg-local", JSON.stringify({members:S.members,chore
 function loadLocal(){ try { const d = JSON.parse(ls.get("wg-local")||"{}"); for (const k of [...COLS,"info"]) if (d[k]) S[k]=d[k]; } catch {} }
 
 function writeErr(e){
-  if (e && e.code === "invalid_argument") { readOnly = true; toast("Du kannst hier nur lesen. Bitte um Zugriff als Mitwirkende*r."); render(); }
+  if (e && e.code === "permission-denied") toast("Kein Schreibzugriff. Sind die Firestore-Regeln eingerichtet?");
+  else if (e && e.code === "resource-exhausted") toast("Das Tageslimit der Datenbank ist erreicht. Morgen geht es weiter.");
   else if (e && e.code === "quota_exceeded") toast("Speicher voll. Lösch alte Einträge.");
   else toast("Speichern hat nicht geklappt. Versuch es gleich noch mal.");
 }
@@ -336,14 +368,77 @@ const api = {
   }
 };
 
+/* ---------- Firebase (Firestore) ---------- */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAVXAuCtryfvng89eT7Dw84tQ5Wem1Dsp0",
+  authDomain: "s60-wg-planer.firebaseapp.com",
+  projectId: "s60-wg-planer",
+  storageBucket: "s60-wg-planer.firebasestorage.app",
+  messagingSenderId: "804637389582",
+  appId: "1:804637389582:web:e9528e2a6b7a052a5edd5f"
+};
+const FB_VERSION = "10.12.2";
+let WG = null;
+const normCode = (c) => String(c||"").trim().toLowerCase().replace(/\s+/g,"");
+const validCode = (c) => /^[a-z0-9-]{12,40}$/.test(c);
+function newCode(){
+  const abc = "abcdefghjkmnpqrstuvwxyz23456789", r = new Uint32Array(16); crypto.getRandomValues(r);
+  return [...r].map(n=>abc[n%abc.length]).join("").match(/.{4}/g).join("-");
+}
+async function firebaseDb(code){
+  const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-app.js`);
+  const F = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-firestore.js`);
+  const fs = F.getFirestore(initializeApp(FIREBASE_CONFIG));
+  const base = `wgs/${code}/`;
+  const wrapDoc = (path) => { const r = F.doc(fs, base+path); return {
+    set: (d) => F.setDoc(r, d), update: (d) => F.updateDoc(r, d), delete: () => F.deleteDoc(r),
+    onSnapshot: (next, err) => F.onSnapshot(r, s => next({ exists: s.exists(), data: () => s.data(), metadata: s.metadata }), err)
+  }; };
+  return {
+    doc: wrapDoc,
+    collection: (c) => ({
+      doc: (id) => wrapDoc(c+"/"+id),
+      onSnapshot: (next, err) => F.onSnapshot(F.collection(fs, base+c), s => next({ docs: s.docs.map(d=>({ id: d.id, data: () => d.data() })), metadata: s.metadata }), err)
+    })
+  };
+}
+function showGate(){ document.body.classList.add("gated"); $("#gate").hidden = false; }
+function enterWg(code){ ls.set("wg-code", code); $("#gate").hidden = true; document.body.classList.remove("gated"); connect(); }
+$("#gateNew").addEventListener("click", () => { enterWg(newCode()); location.hash = "wg"; toast("WG gegründet. Lade jetzt deine Mitbewohner ein."); });
+$("#gateForm").addEventListener("submit", e => {
+  e.preventDefault(); const c = normCode($("#gateCode").value);
+  if (!validCode(c)) return toast("Der Code sieht nicht richtig aus. Er hat mindestens 12 Zeichen.");
+  enterWg(c);
+});
+$("#copyInvite").addEventListener("click", () => {
+  const inp = $("#inviteLink");
+  navigator.clipboard?.writeText(inp.value).then(() => toast("Link kopiert."), () => { inp.select(); toast("Markiert. Jetzt kopieren."); }) ?? (inp.select(), toast("Markiert. Jetzt kopieren."));
+});
+let leaveArmed = false;
+$("#leaveWg").addEventListener("click", e => {
+  if (!leaveArmed) { leaveArmed = true; e.target.textContent = "Wirklich abmelden? Nochmal tippen"; setTimeout(()=>{ leaveArmed=false; e.target.textContent="Auf diesem Gerät abmelden"; }, 4000); return; }
+  try { localStorage.removeItem("wg-code"); } catch {}
+  location.reload();
+});
+
 async function connect(){
-  db = window.claude?.use ? await window.claude.use("db").catch(()=>null) : null;
-  if (!db) { S.mode="local"; loadLocal(); render(); return; }
+  const fromUrl = new URLSearchParams(location.search).get("wg");
+  if (fromUrl !== null) {
+    const c = normCode(fromUrl); if (validCode(c)) ls.set("wg-code", c);
+    history.replaceState(null, "", location.pathname + location.hash);
+  }
+  const code = ls.get("wg-code");
+  if (!code || !validCode(code)) { showGate(); return; }
+  WG = code;
+  const invite = `${location.origin}${location.pathname}?wg=${code}`;
+  $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code; $("#invitePanel").hidden = false;
+  try { db = await firebaseDb(code); }
+  catch { setBanner("Die Datenbank konnte nicht geladen werden. Prüf deine Internetverbindung und lade die Seite neu."); return; }
   S.mode="db";
   const seen = new Set();
   const timer = setTimeout(()=>{ if (seen.size < COLS.length+1) setBanner("Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell."); }, 10000);
   const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===COLS.length+1){ clearTimeout(timer); setBanner(""); } } };
-  const fail = (e) => { clearTimeout(timer); setBanner(e.code==="revoked" ? "Der Zugriff auf die WG-Daten wurde beendet." : "Die gemeinsamen Daten konnten nicht geladen werden."); };
+  const fail = (e) => { clearTimeout(timer); setBanner(e.code==="permission-denied" ? "Kein Zugriff auf die Datenbank. Sind die Firestore-Regeln eingerichtet?" : "Die gemeinsamen Daten konnten nicht geladen werden. Lade die Seite neu."); };
   for (const c of COLS) db.collection(c).onSnapshot(snap => { S[c] = snap.docs.map(d=>({id:d.id,...d.data()})); ok(c,snap); render(); }, fail);
   db.doc("wg/info").onSnapshot(snap => { S.info = snap.exists ? snap.data() : {}; ok("info",snap); render(); }, fail);
   render();
@@ -499,7 +594,7 @@ function render(){
   // WG
   $("#memberList").innerHTML = L(ms, m=>`<li><span class="magnet" style="background:${esc(m.color)}"></span><span class="grow"><b>${esc(m.name)}</b>${m.id===me?' <span class="meta">(du)</span>':""}</span><span class="money meta">${money(bal[m.id]||0)}</span><button class="link" data-del-member="${m.id}">Auszug</button></li>`, "Noch niemand eingetragen.");
   $("#syncHint").textContent = S.mode==="db"
-    ? "Alles hier wird gemeinsam gespeichert. Teilt diese Seite mit euren Mitbewohnern und gebt ihnen die Rolle „Mitwirkende*r“, damit sie mitschreiben können."
+    ? "Alles hier wird gemeinsam gespeichert. Wer den Einladungslink öffnet, sieht sofort denselben Stand."
     : S.mode==="local" ? "Gemeinsames Speichern ist in dieser Ansicht nicht verfügbar. Alles bleibt nur auf diesem Gerät." : "";
   if (S.mode==="local" && !$("#statusBanner").textContent) setBanner("Offline-Modus: Daten werden nur auf diesem Gerät gespeichert.");
 }
