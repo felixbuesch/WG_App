@@ -123,6 +123,8 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
 
 .banner{font-size:.85rem;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}
 .gated section[data-view],.gated nav,.gated .me{display:none!important}
+.noteside{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
+.calmenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
 @media (prefers-reduced-motion:no-preference){ul.list > li{transition:background .2s}}
 </style>
@@ -263,6 +265,7 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
         <label class="f">Nachricht<textarea id="noteText" placeholder="z. B. Handwerker kommt wegen der Heizung, bitte jemand zu Hause sein" required maxlength="400"></textarea></label>
         <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end">
           <label class="f" style="flex:0 1 200px">Datum (optional, macht daraus einen Termin)<input type="date" id="noteDate"></label>
+          <label class="f" style="flex:0 1 120px">Uhrzeit (optional)<input type="time" id="noteTime"></label>
           <button>Anpinnen</button>
         </div>
       </form>
@@ -611,7 +614,52 @@ function render(){
 function noteLi(n, del){
   const d = n.date ? new Date(n.date+"T12:00") : null;
   const box = d ? `<div class="datebox"><span>${d.toLocaleDateString("de-DE",{month:"short"}).replace(".","")}</span><b>${d.getDate()}</b></div>` : "";
-  return `<li style="align-items:flex-start">${box}<div class="grow"><div style="white-space:pre-wrap">${esc(n.text)}</div><div class="meta">${n.by?esc(mName(n.by))+" · ":""}${d?d.toLocaleDateString("de-DE",{weekday:"long"}):new Date(n.created).toLocaleDateString("de-DE")}</div></div>${del?`<button class="link" data-del="notes:${n.id}" aria-label="Zettel abnehmen">Abnehmen</button>`:""}</li>`;
+  const when = d ? d.toLocaleDateString("de-DE",{weekday:"long"}) + (n.time ? `, ${esc(n.time)} Uhr` : "") : new Date(n.created).toLocaleDateString("de-DE");
+  const cal = d ? `<button class="ghost small" data-cal="${n.id}" aria-label="Termin in den Kalender eintragen">In Kalender</button>` : "";
+  const menu = d ? `<div class="calmenu" id="calmenu-${n.id}" hidden><button class="ghost small" data-cal-ics="${n.id}">Apple / Outlook</button><button class="ghost small" data-cal-google="${n.id}">Google Kalender</button></div>` : "";
+  return `<li style="align-items:flex-start">${box}<div class="grow"><div style="white-space:pre-wrap">${esc(n.text)}</div><div class="meta">${n.by?esc(mName(n.by))+" · ":""}${when}</div>${menu}</div><div class="noteside">${cal}${del?`<button class="link" data-del="notes:${n.id}" aria-label="Zettel abnehmen">Abnehmen</button>`:""}</div></li>`;
+}
+
+/* ---------- Kalender-Export ---------- */
+const UA = navigator.userAgent;
+const isApple = /iPhone|iPad|iPod|Macintosh/.test(UA) && !/Android/.test(UA);
+const isAndroid = /Android/.test(UA);
+function calEvent(n){
+  const text = String(n.text||"").trim();
+  const title = (text.split("\n")[0] || "WG-Termin").slice(0,80);
+  const ymd = n.date.replace(/-/g,"");
+  let start, end, allDay = !n.time;
+  if (allDay) { start = ymd; end = addDays(n.date,1).replace(/-/g,""); }
+  else {
+    const [h,m] = n.time.split(":").map(Number);
+    const eh = Math.min(h+1,23), em = h+1>23 ? 59 : m;
+    start = `${ymd}T${pad(h)}${pad(m)}00`; end = `${ymd}T${pad(eh)}${pad(em)}00`;
+  }
+  const wg = (S.info.name ? S.info.name : "WG") + " Planer";
+  return { title, details: `${text}\n\nAus dem ${wg}`, start, end, allDay, uid: `${n.id}@wg-planer` };
+}
+function icsFor(n){
+  const e = calEvent(n);
+  const x = (s) => String(s).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+  const now = new Date().toISOString().replace(/[-:]/g,"").replace(/\.\d+/,"");
+  const dt = (k,v) => e.allDay ? `${k};VALUE=DATE:${v}` : `${k}:${v}`;
+  return ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//WG Planer//DE","CALSCALE:GREGORIAN","METHOD:PUBLISH",
+    "BEGIN:VEVENT",`UID:${e.uid}`,`DTSTAMP:${now}`,dt("DTSTART",e.start),dt("DTEND",e.end),
+    `SUMMARY:${x(e.title)}`,`DESCRIPTION:${x(e.details)}`,"END:VEVENT","END:VCALENDAR"].join("\r\n");
+}
+function openIcs(n){
+  const blob = new Blob([icsFor(n)], {type:"text/calendar;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url;
+  if (!/iPhone|iPad|iPod/.test(UA)) a.download = "termin.ics";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 60000);
+}
+function openGoogle(n){
+  const e = calEvent(n);
+  const q = new URLSearchParams({ action:"TEMPLATE", text:e.title, dates:`${e.start}/${e.end}`, details:e.details, ctz:"Europe/Berlin" });
+  const a = document.createElement("a"); a.href = `https://calendar.google.com/calendar/render?${q}`; a.target = "_blank"; a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 /* ---------- routing ---------- */
@@ -668,8 +716,10 @@ $("#expForm").addEventListener("submit", e=>{
 });
 $("#noteForm").addEventListener("submit", e=>{
   e.preventDefault();
-  api.add("notes",{text:$("#noteText").value.trim(), date:$("#noteDate").value||null, by:me||null});
-  $("#noteText").value=""; $("#noteDate").value=""; toast("Angepinnt.");
+  const date = $("#noteDate").value||null, time = date ? ($("#noteTime").value||null) : null;
+  if (!date && $("#noteTime").value) return toast("Für eine Uhrzeit brauchst du auch ein Datum.");
+  api.add("notes",{text:$("#noteText").value.trim(), date, time, by:me||null});
+  $("#noteText").value=""; $("#noteDate").value=""; $("#noteTime").value=""; toast(date ? "Termin angepinnt." : "Angepinnt.");
 });
 
 let pendingDelete = null;
@@ -689,6 +739,14 @@ document.addEventListener("click", e=>{
     const c=S.chores.find(x=>x.id===t.dataset.chorePass); if(!c) return;
     const r=(c.rotation||[]).filter(member); const cur=r.indexOf(choreAssignee(c)); const nxt=r[(cur+1)%r.length];
     api.update("chores",c.id,{idx:c.rotation.indexOf(nxt)}); toast(`${mName(nxt)} ist jetzt dran.`); return;
+  }
+  if (t.dataset.cal || t.dataset.calIcs || t.dataset.calGoogle){
+    const n = S.notes.find(x=>x.id===(t.dataset.cal||t.dataset.calIcs||t.dataset.calGoogle)); if (!n || !n.date) return;
+    if (t.dataset.calIcs) return openIcs(n);
+    if (t.dataset.calGoogle) return openGoogle(n);
+    if (isApple) return openIcs(n);
+    if (isAndroid) return openGoogle(n);
+    document.querySelectorAll(`[id="calmenu-${n.id}"]`).forEach(m=>m.hidden=!m.hidden); return;
   }
   if (t.dataset.settle){
     const [from,to,amount]=t.dataset.settle.split(":");
