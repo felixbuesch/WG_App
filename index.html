@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}img{max-width:100%}</style>
+</head>
+<body>
+<title>WG-Planer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a fridge door — sticky header with tabs, then one working view; members are colored magnets */
+:root{
+  --bg:#eef0ec; --surface:#ffffff; --surface-2:#f6f7f4; --line:#d9ddd5;
+  --fg:#1c211d; --muted:#5f6862; --accent:#2747d6; --accent-ink:#ffffff; --accent-soft:#e3e8fc;
+  --good:#1d7a4a; --good-soft:#dcf0e4; --warn:#a15c00; --warn-soft:#fbecd3; --bad:#b4231c; --bad-soft:#f9dfdc;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141715; --surface:#1d211e; --surface-2:#232825; --line:#333a35;
+  --fg:#e9ece8; --muted:#9aa49d; --accent:#8ea2ff; --accent-ink:#0f1430; --accent-soft:#252c4d;
+  --good:#6fd39d; --good-soft:#1b3326; --warn:#f0b259; --warn-soft:#3a2d17; --bad:#ff8a80; --bad-soft:#3f1f1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141715; --surface:#1d211e; --surface-2:#232825; --line:#333a35;
+  --fg:#e9ece8; --muted:#9aa49d; --accent:#8ea2ff; --accent-ink:#0f1430; --accent-soft:#252c4d;
+  --good:#6fd39d; --good-soft:#1b3326; --warn:#f0b259; --warn-soft:#3a2d17; --bad:#ff8a80; --bad-soft:#3f1f1c; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
+.wrap{max-width:980px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px 16px;padding-block:14px 8px}
+h1{font:800 1.6rem/1.1 var(--display);margin:0;letter-spacing:-.01em}
+h1 small{display:block;font:500 .72rem/1.3 var(--body);color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.me{display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted)}
+nav{display:flex;gap:4px;overflow-x:auto;padding-bottom:0;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav a{flex:none;padding:8px 12px 10px;color:var(--muted);text-decoration:none;font-weight:600;border-bottom:3px solid transparent;font-size:.93rem}
+nav a[aria-current="page"]{color:var(--fg);border-color:var(--accent)}
+nav a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px}
+nav .count{display:inline-block;min-width:1.4em;margin-left:4px;padding:0 5px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font:500 .72rem/1.5 var(--mono);text-align:center}
+
+main{padding-block:20px 48px}
+section[data-view]{display:grid;gap:18px}
+h2{font:700 1.15rem/1.2 var(--display);margin:0;text-wrap:balance}
+h3{font:600 .75rem/1.3 var(--body);margin:0 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:18px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.panel > h2{margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.panel > h2 a{font:600 .82rem var(--body);color:var(--accent);text-decoration:none}
+.hint{color:var(--muted);font-size:.88rem;margin:0}
+.empty{color:var(--muted);font-size:.9rem;padding:14px;border:1px dashed var(--line);border-radius:8px;text-align:center}
+
+form.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+form.stack{display:grid;gap:10px}
+label.f{display:grid;gap:4px;font-size:.8rem;color:var(--muted);font-weight:600;flex:1 1 140px;min-width:0}
+input[type=text],input[type=number],input[type=date],select,textarea{font:inherit;color:var(--fg);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0}
+textarea{resize:vertical;min-height:64px}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+button{font:600 .9rem var(--body);border-radius:8px;padding:8px 14px;border:1px solid transparent;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+button.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+button.ghost:hover{background:var(--surface-2)}
+button.link{background:none;border:0;padding:4px 6px;color:var(--muted);font-weight:500}
+button.link:hover{color:var(--bad)}
+button.small{padding:5px 10px;font-size:.82rem}
+.pickers{display:flex;flex-wrap:wrap;gap:6px}
+.pick{display:inline-flex;align-items:center;gap:6px;padding:5px 10px 5px 6px;border:1px solid var(--line);border-radius:99px;font-size:.85rem;cursor:pointer;user-select:none;background:var(--surface-2)}
+.pick input{position:absolute;opacity:0;pointer-events:none}
+.pick:has(input:checked){border-color:var(--fg);background:var(--surface)}
+.pick:not(:has(input:checked)){opacity:.55}
+.pick:has(input:focus-visible){outline:2px solid var(--accent)}
+
+.magnet{display:inline-block;width:14px;height:14px;border-radius:50%;flex:none;box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+.who{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+
+ul.list{list-style:none;margin:0;padding:0;display:grid}
+ul.list > li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);min-width:0}
+ul.list > li:first-child{border-top:0}
+.grow{flex:1;min-width:0;overflow-wrap:anywhere}
+.meta{font-size:.8rem;color:var(--muted)}
+.chip{flex:none;font:500 .72rem/1 var(--mono);padding:5px 8px;border-radius:99px;white-space:nowrap}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.good{background:var(--good-soft);color:var(--good)}
+.chip.neutral{background:var(--surface-2);color:var(--muted)}
+.money{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.chk{appearance:none;width:22px;height:22px;flex:none;border:2px solid var(--line);border-radius:6px;cursor:pointer;display:grid;place-content:center;background:var(--surface)}
+.chk:checked{background:var(--good);border-color:var(--good)}
+.chk:checked::after{content:"";width:10px;height:6px;border:2px solid var(--surface);border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+li.done .grow{color:var(--muted);text-decoration:line-through}
+
+.bal{display:grid;grid-template-columns:minmax(80px,auto) 1fr auto;gap:8px 12px;align-items:center}
+.bar{position:relative;height:10px;background:var(--surface-2);border-radius:99px}
+.bar::before{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line)}
+.bar i{position:absolute;top:0;bottom:0;border-radius:99px}
+
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr));gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;text-decoration:none;color:inherit}
+.stat b{display:block;font:800 1.6rem/1.1 var(--display)}
+.stat span{font-size:.82rem;color:var(--muted)}
+.stat.alert b{color:var(--bad)}
+
+.note{background:var(--surface-2);border-radius:8px;padding:10px 12px}
+.datebox{flex:none;width:48px;text-align:center;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.datebox b{display:block;font:800 1.15rem/1.3 var(--display)}
+.datebox span{display:block;font:500 .64rem/1.6 var(--mono);text-transform:uppercase;background:var(--accent);color:var(--accent-ink)}
+
+.banner{font-size:.85rem;padding:8px 12px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:.88rem;z-index:20;max-width:calc(100% - 32px)}
+@media (prefers-reduced-motion:no-preference){ul.list > li{transition:background .2s}}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="top">
+      <h1 id="wgTitle"><small>WG-Planer</small><span id="wgName">Unsere WG</span></h1>
+      <label class="me" for="meSel">Ich bin
+        <select id="meSel" style="width:auto"><option value="">–</option></select>
+      </label>
+    </div>
+    <nav id="tabs" aria-label="Bereiche">
+      <a href="#start">Übersicht</a>
+      <a href="#putzplan">Putzplan <span class="count" id="cChores" hidden></span></a>
+      <a href="#einkauf">Einkauf <span class="count" id="cShop" hidden></span></a>
+      <a href="#kasse">Kasse</a>
+      <a href="#pinnwand">Pinnwand</a>
+      <a href="#wg">WG</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <p class="banner" id="statusBanner" hidden></p>
+
+  <!-- ÜBERSICHT -->
+  <section data-view="start">
+    <div class="panel" id="onboard" hidden>
+      <h2>Wer wohnt hier?</h2>
+      <p class="hint" style="margin-bottom:12px">Tragt zuerst alle Mitbewohner ein. Danach könnt ihr Putzdienste verteilen, einkaufen und Ausgaben teilen.</p>
+      <form class="row" id="onboardForm">
+        <label class="f">Name<input type="text" id="onboardName" placeholder="z. B. Lena" required maxlength="30"></label>
+        <button>Hinzufügen</button>
+      </form>
+      <div class="pickers" id="onboardList" style="margin-top:10px"></div>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div class="grid2">
+      <div class="panel"><h2>Diese Woche dran <a href="#putzplan">Putzplan</a></h2><ul class="list" id="ovChores"></ul></div>
+      <div class="panel"><h2>Einkaufsliste <a href="#einkauf">Alle</a></h2><ul class="list" id="ovShop"></ul></div>
+      <div class="panel"><h2>Kontostand <a href="#kasse">Kasse</a></h2><div id="ovBal"></div></div>
+      <div class="panel"><h2>Demnächst <a href="#pinnwand">Pinnwand</a></h2><ul class="list" id="ovNotes"></ul></div>
+    </div>
+  </section>
+
+  <!-- PUTZPLAN -->
+  <section data-view="putzplan" hidden>
+    <div class="panel">
+      <h2>Aufgaben im Wechsel</h2>
+      <ul class="list" id="choreList"></ul>
+    </div>
+    <div class="panel">
+      <h2>Neue Aufgabe</h2>
+      <form class="stack" id="choreForm">
+        <div class="row" style="display:flex;flex-wrap:wrap;gap:8px">
+          <label class="f" style="flex-basis:220px">Was?<input type="text" id="choreTitle" placeholder="z. B. Bad putzen" required maxlength="60"></label>
+          <label class="f">Wie oft?
+            <select id="choreEvery">
+              <option value="1">täglich</option>
+              <option value="3">alle 3 Tage</option>
+              <option value="7" selected>wöchentlich</option>
+              <option value="14">alle 2 Wochen</option>
+              <option value="30">monatlich</option>
+            </select>
+          </label>
+          <label class="f">Erstmals fällig<input type="date" id="choreDue"></label>
+        </div>
+        <div><h3>Reihum zwischen (erste Person beginnt)</h3><div class="pickers" id="choreWho"></div></div>
+        <div><button>Aufgabe anlegen</button></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- EINKAUF -->
+  <section data-view="einkauf" hidden>
+    <div class="panel">
+      <h2>Einkaufsliste</h2>
+      <form class="row" id="shopForm" style="margin-bottom:8px">
+        <label class="f" style="flex-basis:220px">Artikel<input type="text" id="shopText" placeholder="z. B. Spülmittel, Klopapier" required maxlength="80"></label>
+        <button>Auf die Liste</button>
+      </form>
+      <ul class="list" id="shopList"></ul>
+      <div id="shopDoneWrap" hidden style="margin-top:14px">
+        <h3>Im Korb</h3>
+        <ul class="list" id="shopDone"></ul>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
+          <button class="ghost small" id="shopToKasse">Als Ausgabe eintragen</button>
+          <button class="ghost small" id="shopClear">Erledigte entfernen</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- KASSE -->
+  <section data-view="kasse" hidden>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Wer schuldet wem?</h2>
+        <div id="balList"></div>
+        <h3 style="margin-top:16px">So wird ausgeglichen</h3>
+        <ul class="list" id="settleList"></ul>
+      </div>
+      <div class="panel">
+        <h2>Ausgabe eintragen</h2>
+        <form class="stack" id="expForm">
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            <label class="f" style="flex-basis:180px">Wofür?<input type="text" id="expTitle" placeholder="z. B. Wocheneinkauf" required maxlength="80"></label>
+            <label class="f" style="flex-basis:100px">Betrag (€)<input type="number" id="expAmount" min="0.01" step="0.01" inputmode="decimal" placeholder="0,00" required></label>
+          </div>
+          <label class="f">Bezahlt von<select id="expPayer" required></select></label>
+          <div><h3>Geteilt zwischen</h3><div class="pickers" id="expWho"></div></div>
+          <div><button>Eintragen</button></div>
+        </form>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Verlauf</h2>
+      <ul class="list" id="expList"></ul>
+    </div>
+  </section>
+
+  <!-- PINNWAND -->
+  <section data-view="pinnwand" hidden>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Termine</h2>
+        <ul class="list" id="eventList"></ul>
+      </div>
+      <div class="panel">
+        <h2>Zettel</h2>
+        <ul class="list" id="noteList"></ul>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Etwas anpinnen</h2>
+      <form class="stack" id="noteForm">
+        <label class="f">Nachricht<textarea id="noteText" placeholder="z. B. Handwerker kommt wegen der Heizung, bitte jemand zu Hause sein" required maxlength="400"></textarea></label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:end">
+          <label class="f" style="flex:0 1 200px">Datum (optional, macht daraus einen Termin)<input type="date" id="noteDate"></label>
+          <button>Anpinnen</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- WG -->
+  <section data-view="wg" hidden>
+    <div class="grid2">
+      <div class="panel">
+        <h2>Mitbewohner</h2>
+        <ul class="list" id="memberList"></ul>
+        <form class="row" id="memberForm" style="margin-top:12px">
+          <label class="f">Name<input type="text" id="memberName" placeholder="Name" required maxlength="30"></label>
+          <button>Hinzufügen</button>
+        </form>
+      </div>
+      <div class="panel">
+        <h2>Name der WG</h2>
+        <form class="row" id="nameForm">
+          <label class="f">Name<input type="text" id="wgNameInput" placeholder="z. B. Hinterhaus 3. OG" maxlength="40"></label>
+          <button>Speichern</button>
+        </form>
+        <p class="hint" style="margin-top:14px" id="syncHint"></p>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status" hidden></div>
+
+<script>
+(() => {
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const COLORS = ["#e4572e","#2e86ab","#f2a541","#5c9e5a","#a14ebf","#d94f8a","#3fb8af","#8c6d46"];
+const COLS = ["members","chores","shopping","expenses","notes"];
+const eur = new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"});
+const money = (c) => eur.format((c||0)/100);
+const pad = (n) => String(n).padStart(2,"0");
+const iso = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const today = () => iso(new Date());
+const addDays = (s,n) => { const d = new Date(s+"T12:00"); d.setDate(d.getDate()+n); return iso(d); };
+const diffDays = (s) => Math.round((new Date(s+"T12:00") - new Date(today()+"T12:00"))/864e5);
+const fmtDate = (s) => new Date(s+"T12:00").toLocaleDateString("de-DE",{weekday:"short",day:"numeric",month:"short"});
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2)).replace(/-/g,"").slice(0,20);
+const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,2600); }
+
+/* ---------- Data layer: shared db when available, otherwise this device only ---------- */
+const S = { mode:"loading", members:[], chores:[], shopping:[], expenses:[], notes:[], info:{} };
+let db = null, readOnly = false;
+
+function saveLocal(){ ls.set("wg-local", JSON.stringify({members:S.members,chores:S.chores,shopping:S.shopping,expenses:S.expenses,notes:S.notes,info:S.info})); }
+function loadLocal(){ try { const d = JSON.parse(ls.get("wg-local")||"{}"); for (const k of [...COLS,"info"]) if (d[k]) S[k]=d[k]; } catch {} }
+
+function writeErr(e){
+  if (e && e.code === "invalid_argument") { readOnly = true; toast("Du kannst hier nur lesen. Bitte um Zugriff als Mitwirkende*r."); render(); }
+  else if (e && e.code === "quota_exceeded") toast("Speicher voll. Lösch alte Einträge.");
+  else toast("Speichern hat nicht geklappt. Versuch es gleich noch mal.");
+}
+const api = {
+  async add(col, obj){
+    const id = uid(); const row = {...obj, created: Date.now()};
+    if (S.mode==="db") { try { await db.collection(col).doc(id).set(row); } catch(e){ writeErr(e); } }
+    else { S[col].push({id,...row}); saveLocal(); render(); }
+  },
+  async update(col, id, patch){
+    if (S.mode==="db") { try { await db.collection(col).doc(id).update(patch); } catch(e){ writeErr(e); } }
+    else { const r=S[col].find(x=>x.id===id); if(r) Object.assign(r,patch); saveLocal(); render(); }
+  },
+  async remove(col, id){
+    if (S.mode==="db") { try { await db.collection(col).doc(id).delete(); } catch(e){ writeErr(e); } }
+    else { S[col]=S[col].filter(x=>x.id!==id); saveLocal(); render(); }
+  },
+  async setInfo(obj){
+    if (S.mode==="db") { try { await db.doc("wg/info").set({...S.info,...obj}); } catch(e){ writeErr(e); } }
+    else { S.info={...S.info,...obj}; saveLocal(); render(); }
+  }
+};
+
+async function connect(){
+  db = window.claude?.use ? await window.claude.use("db").catch(()=>null) : null;
+  if (!db) { S.mode="local"; loadLocal(); render(); return; }
+  S.mode="db";
+  const seen = new Set();
+  const timer = setTimeout(()=>{ if (seen.size < COLS.length+1) setBanner("Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell."); }, 10000);
+  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===COLS.length+1){ clearTimeout(timer); setBanner(""); } } };
+  const fail = (e) => { clearTimeout(timer); setBanner(e.code==="revoked" ? "Der Zugriff auf die WG-Daten wurde beendet." : "Die gemeinsamen Daten konnten nicht geladen werden."); };
+  for (const c of COLS) db.collection(c).onSnapshot(snap => { S[c] = snap.docs.map(d=>({id:d.id,...d.data()})); ok(c,snap); render(); }, fail);
+  db.doc("wg/info").onSnapshot(snap => { S.info = snap.exists ? snap.data() : {}; ok("info",snap); render(); }, fail);
+  render();
+}
+function setBanner(t){ const b=$("#statusBanner"); b.textContent=t; b.hidden=!t; }
+
+/* ---------- helpers ---------- */
+const member = (id) => S.members.find(m=>m.id===id);
+const mName = (id) => member(id)?.name || "Ehemalig";
+const mColor = (id) => member(id)?.color || "#999";
+const who = (id) => `<span class="who"><span class="magnet" style="background:${esc(mColor(id))}"></span>${esc(mName(id))}</span>`;
+const sortedMembers = () => [...S.members].sort((a,b)=>(a.created||0)-(b.created||0));
+let me = ls.get("wg-me") || "";
+
+function dueChip(due){
+  const d = diffDays(due);
+  if (d < 0) return `<span class="chip bad">${-d} ${-d===1?"Tag":"Tage"} drüber</span>`;
+  if (d === 0) return `<span class="chip warn">heute</span>`;
+  if (d === 1) return `<span class="chip warn">morgen</span>`;
+  return `<span class="chip neutral">in ${d} Tagen</span>`;
+}
+const choreAssignee = (c) => { const r=(c.rotation||[]).filter(member); return r.length ? r[(c.idx||0)%r.length] : null; };
+
+function balances(){
+  const b = Object.fromEntries(S.members.map(m=>[m.id,0]));
+  for (const e of S.expenses){
+    const split = (e.split||[]).length ? e.split : [];
+    if (!split.length) continue;
+    b[e.paidBy] = (b[e.paidBy]||0) + e.amount;
+    const share = Math.floor(e.amount / split.length); let rest = e.amount - share*split.length;
+    split.forEach((id,i)=>{ b[id] = (b[id]||0) - share - (i<rest?1:0); });
+  }
+  return b;
+}
+function settlements(b){
+  const pos = Object.entries(b).filter(([,v])=>v>0).map(([id,v])=>({id,v})).sort((x,y)=>y.v-x.v);
+  const neg = Object.entries(b).filter(([,v])=>v<0).map(([id,v])=>({id,v:-v})).sort((x,y)=>y.v-x.v);
+  const out=[]; let i=0,j=0;
+  while(i<pos.length && j<neg.length){
+    const a=Math.min(pos[i].v,neg[j].v); if (a>0) out.push({from:neg[j].id,to:pos[i].id,amount:a});
+    pos[i].v-=a; neg[j].v-=a; if(pos[i].v===0)i++; if(neg[j].v===0)j++;
+  }
+  return out;
+}
+function balanceHTML(b, compact){
+  const ms = sortedMembers(); if (!ms.length) return `<p class="empty">Noch keine Mitbewohner eingetragen.</p>`;
+  const max = Math.max(1,...ms.map(m=>Math.abs(b[m.id]||0)));
+  return `<div class="bal">` + ms.map(m=>{
+    const v=b[m.id]||0, w=Math.abs(v)/max*50;
+    const col = v>0?"var(--good)":v<0?"var(--bad)":"var(--muted)";
+    const bar = v>=0 ? `left:50%;width:${w}%` : `right:50%;width:${w}%`;
+    return `${who(m.id)}<div class="bar"><i style="${bar};background:${col}"></i></div><span class="money" style="color:${col}">${v>0?"+":""}${money(v)}</span>`;
+  }).join("") + `</div>` + (compact?"":`<p class="hint" style="margin-top:10px">Plus heißt: bekommt Geld zurück. Minus heißt: muss noch zahlen.</p>`);
+}
+
+/* ---------- rendering ---------- */
+let pickSig = "";
+function renderPickers(){
+  const ms = sortedMembers();
+  const sig = ms.map(m=>m.id+m.name+m.color).join("|");
+  const sel = $("#meSel");
+  if (sig !== pickSig){
+    pickSig = sig;
+    const pick = (name) => ms.map(m=>`<label class="pick"><input type="checkbox" name="${name}" value="${m.id}" checked><span class="magnet" style="background:${esc(m.color)}"></span>${esc(m.name)}</label>`).join("") || `<span class="hint">Erst Mitbewohner im Bereich „WG“ eintragen.</span>`;
+    $("#choreWho").innerHTML = pick("choreWho");
+    $("#expWho").innerHTML = pick("expWho");
+    $("#expPayer").innerHTML = ms.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
+    sel.innerHTML = `<option value="">–</option>` + ms.map(m=>`<option value="${m.id}">${esc(m.name)}</option>`).join("");
+  }
+  if (me && !member(me) && S.mode!=="loading" && ms.length) me = "";
+  sel.value = me;
+  if (me && document.activeElement !== $("#expPayer")) $("#expPayer").value = me;
+}
+
+function render(){
+  const name = S.info.name || "Unsere WG";
+  $("#wgName").textContent = name;
+  if (document.activeElement !== $("#wgNameInput")) $("#wgNameInput").value = S.info.name || "";
+  renderPickers();
+  const ms = sortedMembers();
+  const chores = [...S.chores].sort((a,b)=>a.due.localeCompare(b.due));
+  const openShop = S.shopping.filter(s=>!s.done).sort((a,b)=>(a.created||0)-(b.created||0));
+  const doneShop = S.shopping.filter(s=>s.done);
+  const bal = balances();
+  const t = today();
+  const events = S.notes.filter(n=>n.date && n.date>=t).sort((a,b)=>a.date.localeCompare(b.date));
+  const plain = S.notes.filter(n=>!n.date).sort((a,b)=>(b.created||0)-(a.created||0));
+  const dueSoon = chores.filter(c=>diffDays(c.due)<=6);
+  const urgent = chores.filter(c=>diffDays(c.due)<=0);
+
+  // Tabs counters
+  const cc=$("#cChores"); cc.textContent=urgent.length; cc.hidden=!urgent.length;
+  const cs=$("#cShop"); cs.textContent=openShop.length; cs.hidden=!openShop.length;
+
+  // Onboarding
+  $("#onboard").hidden = S.mode==="loading" || ms.length >= 2;
+  $("#onboardList").innerHTML = ms.map(m=>`<span class="pick"><span class="magnet" style="background:${esc(m.color)}"></span>${esc(m.name)}</span>`).join("");
+
+  // Summary
+  const myBal = me ? bal[me]||0 : null;
+  const myTasks = me ? urgent.filter(c=>choreAssignee(c)===me).length : urgent.length;
+  $("#summary").innerHTML = S.mode==="loading" ? "" : `
+    <a class="stat ${myTasks?"alert":""}" href="#putzplan"><b>${myTasks}</b><span>${me?"Aufgaben für dich fällig":"Aufgaben heute fällig"}</span></a>
+    <a class="stat" href="#einkauf"><b>${openShop.length}</b><span>Sachen auf der Einkaufsliste</span></a>
+    <a class="stat" href="#kasse"><b class="money" style="font-family:var(--display)">${me?money(myBal):money(S.expenses.filter(e=>!e.settle).reduce((s,e)=>s+e.amount,0))}</b><span>${me?(myBal>=0?"bekommst du zurück":"schuldest du der WG"):"Ausgaben gesamt"}</span></a>
+    <a class="stat" href="#pinnwand"><b>${events.length}</b><span>anstehende Termine</span></a>`;
+
+  const loading = `<li><p class="hint">Lade …</p></li>`;
+  const L = (arr, fn, empty) => S.mode==="loading" ? loading : arr.length ? arr.map(fn).join("") : `<li style="display:block"><p class="empty">${empty}</p></li>`;
+
+  // Overview
+  $("#ovChores").innerHTML = L(dueSoon.slice(0,6), c=>{ const a=choreAssignee(c); return `<li><div class="grow"><b>${esc(c.title)}</b><div class="meta">${a?who(a):"niemand eingeteilt"}</div></div>${dueChip(c.due)}</li>`; }, "In den nächsten 7 Tagen ist nichts fällig.");
+  $("#ovShop").innerHTML = L(openShop.slice(0,6), s=>`<li><input type="checkbox" class="chk" data-shop="${s.id}" aria-label="${esc(s.text)} abhaken"><span class="grow">${esc(s.text)}</span></li>`, "Alles da. Die Liste ist leer.") + (openShop.length>6?`<li><span class="meta">und ${openShop.length-6} weitere</span></li>`:"");
+  $("#ovBal").innerHTML = S.mode==="loading" ? `<p class="hint">Lade …</p>` : balanceHTML(bal, true);
+  $("#ovNotes").innerHTML = L(events.slice(0,4), n=>noteLi(n), "Keine Termine eingetragen.");
+
+  // Putzplan
+  $("#choreList").innerHTML = L(chores, c=>{
+    const a = choreAssignee(c); const r=(c.rotation||[]).filter(member);
+    const next = r.length>1 ? r[((c.idx||0)+1)%r.length] : null;
+    const every = {1:"täglich",3:"alle 3 Tage",7:"wöchentlich",14:"alle 2 Wochen",30:"monatlich"}[c.every] || `alle ${c.every} Tage`;
+    const last = c.lastBy ? ` · zuletzt ${esc(mName(c.lastBy))}, ${fmtDate(c.lastAt)}` : "";
+    return `<li style="flex-wrap:wrap"><div class="grow" style="flex-basis:200px"><b>${esc(c.title)}</b> ${dueChip(c.due)}
+      <div class="meta">Dran: ${a?who(a):"niemand"}${next?` · danach ${esc(mName(next))}`:""}</div>
+      <div class="meta">${every}${last}</div></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="small" data-chore-done="${c.id}" ${readOnly?"disabled":""}>Erledigt</button>
+        ${r.length>1?`<button class="ghost small" data-chore-pass="${c.id}" title="Diesmal übernimmt die nächste Person">Weitergeben</button>`:""}
+        <button class="link" data-del="chores:${c.id}" aria-label="${esc(c.title)} löschen">Löschen</button>
+      </div></li>`;
+  }, "Noch keine Aufgaben. Leg unten die erste an, z. B. Bad, Küche oder Müll.");
+
+  // Einkauf
+  $("#shopList").innerHTML = L(openShop, s=>`<li><input type="checkbox" class="chk" data-shop="${s.id}" aria-label="${esc(s.text)} abhaken"><span class="grow">${esc(s.text)}${s.by?`<span class="meta"> · ${esc(mName(s.by))}</span>`:""}</span><button class="link" data-del="shopping:${s.id}" aria-label="${esc(s.text)} löschen">Löschen</button></li>`, "Die Liste ist leer.");
+  $("#shopDoneWrap").hidden = !doneShop.length;
+  $("#shopDone").innerHTML = doneShop.map(s=>`<li class="done"><input type="checkbox" class="chk" checked data-shop="${s.id}" aria-label="${esc(s.text)} zurück auf die Liste"><span class="grow">${esc(s.text)}</span></li>`).join("");
+
+  // Kasse
+  $("#balList").innerHTML = S.mode==="loading" ? `<p class="hint">Lade …</p>` : balanceHTML(bal);
+  const st = settlements(bal);
+  $("#settleList").innerHTML = S.mode==="loading" ? loading : st.length ? st.map(s=>`<li><div class="grow">${who(s.from)} <span class="meta">zahlt an</span> ${who(s.to)}</div><span class="money">${money(s.amount)}</span><button class="ghost small" data-settle="${s.from}:${s.to}:${s.amount}">Bezahlt</button></li>`).join("") : `<li style="display:block"><p class="empty">Alle sind quitt.</p></li>`;
+  const exps = [...S.expenses].sort((a,b)=>(b.created||0)-(a.created||0));
+  $("#expList").innerHTML = L(exps.slice(0,60), e=>{
+    const split = e.split||[];
+    const forTxt = e.settle ? `an ${esc(mName(split[0]))}` : split.length===ms.length ? "für alle" : `für ${split.map(id=>esc(mName(id))).join(", ")}`;
+    return `<li><div class="grow"><b>${esc(e.title)}</b>${e.settle?` <span class="chip good">Ausgleich</span>`:""}<div class="meta">${who(e.paidBy)} ${forTxt} · ${new Date(e.created).toLocaleDateString("de-DE")}</div></div><span class="money">${money(e.amount)}</span><button class="link" data-del="expenses:${e.id}" aria-label="Ausgabe löschen">Löschen</button></li>`;
+  }, "Noch keine Ausgaben. Trag oben den ersten Einkauf ein.");
+
+  // Pinnwand
+  $("#eventList").innerHTML = L(events, n=>noteLi(n,true), "Keine anstehenden Termine.");
+  $("#noteList").innerHTML = L(plain, n=>noteLi(n,true), "Die Pinnwand ist leer.");
+
+  // WG
+  $("#memberList").innerHTML = L(ms, m=>`<li><span class="magnet" style="background:${esc(m.color)}"></span><span class="grow"><b>${esc(m.name)}</b>${m.id===me?' <span class="meta">(du)</span>':""}</span><span class="money meta">${money(bal[m.id]||0)}</span><button class="link" data-del-member="${m.id}">Auszug</button></li>`, "Noch niemand eingetragen.");
+  $("#syncHint").textContent = S.mode==="db"
+    ? "Alles hier wird gemeinsam gespeichert. Teilt diese Seite mit euren Mitbewohnern und gebt ihnen die Rolle „Mitwirkende*r“, damit sie mitschreiben können."
+    : S.mode==="local" ? "Gemeinsames Speichern ist in dieser Ansicht nicht verfügbar. Alles bleibt nur auf diesem Gerät." : "";
+  if (S.mode==="local" && !$("#statusBanner").textContent) setBanner("Offline-Modus: Daten werden nur auf diesem Gerät gespeichert.");
+}
+function noteLi(n, del){
+  const d = n.date ? new Date(n.date+"T12:00") : null;
+  const box = d ? `<div class="datebox"><span>${d.toLocaleDateString("de-DE",{month:"short"}).replace(".","")}</span><b>${d.getDate()}</b></div>` : "";
+  return `<li style="align-items:flex-start">${box}<div class="grow"><div style="white-space:pre-wrap">${esc(n.text)}</div><div class="meta">${n.by?esc(mName(n.by))+" · ":""}${d?d.toLocaleDateString("de-DE",{weekday:"long"}):new Date(n.created).toLocaleDateString("de-DE")}</div></div>${del?`<button class="link" data-del="notes:${n.id}" aria-label="Zettel abnehmen">Abnehmen</button>`:""}</li>`;
+}
+
+/* ---------- routing ---------- */
+const VIEWS = ["start","putzplan","einkauf","kasse","pinnwand","wg"];
+function route(){
+  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : "start";
+  document.querySelectorAll("section[data-view]").forEach(s=>s.hidden = s.dataset.view!==v);
+  document.querySelectorAll("#tabs a").forEach(a=>a.getAttribute("href")==="#"+v ? a.setAttribute("aria-current","page") : a.removeAttribute("aria-current"));
+}
+addEventListener("hashchange", ()=>{ route(); scrollTo(0,0); });
+
+/* ---------- events ---------- */
+const checked = (name) => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i=>i.value);
+function addMember(name){
+  name = name.trim(); if (!name) return;
+  if (S.members.some(m=>m.name.toLowerCase()===name.toLowerCase())) return toast(`${name} wohnt schon hier.`);
+  const used = new Set(S.members.map(m=>m.color));
+  const color = COLORS.find(c=>!used.has(c)) || COLORS[S.members.length % COLORS.length];
+  api.add("members",{name,color}); toast(`${name} ist eingezogen.`);
+}
+$("#onboardForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#onboardName").value); $("#onboardName").value=""; });
+$("#memberForm").addEventListener("submit", e=>{ e.preventDefault(); addMember($("#memberName").value); $("#memberName").value=""; });
+$("#nameForm").addEventListener("submit", e=>{ e.preventDefault(); api.setInfo({name:$("#wgNameInput").value.trim()}); toast("Gespeichert."); });
+$("#meSel").addEventListener("change", e=>{ me=e.target.value; ls.set("wg-me",me); render(); });
+
+$("#choreDue").value = today();
+$("#choreForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const rotation = checked("choreWho"); if (!rotation.length) return toast("Wähl mindestens eine Person aus.");
+  api.add("chores",{title:$("#choreTitle").value.trim(), every:+$("#choreEvery").value, due:$("#choreDue").value||today(), rotation, idx:0});
+  $("#choreTitle").value=""; toast("Aufgabe angelegt.");
+});
+$("#shopForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const items = $("#shopText").value.split(",").map(s=>s.trim()).filter(Boolean);
+  items.forEach(text=>api.add("shopping",{text,done:false,by:me||null}));
+  $("#shopText").value=""; $("#shopText").focus();
+});
+$("#shopClear").addEventListener("click", ()=>{ S.shopping.filter(s=>s.done).forEach(s=>api.remove("shopping",s.id)); });
+$("#shopToKasse").addEventListener("click", ()=>{
+  const items = S.shopping.filter(s=>s.done).map(s=>s.text);
+  $("#expTitle").value = ("Einkauf: "+items.join(", ")).slice(0,80);
+  location.hash="kasse"; setTimeout(()=>$("#expAmount").focus(),50);
+});
+$("#expForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  const amount = Math.round(parseFloat(String($("#expAmount").value).replace(",","."))*100);
+  const split = checked("expWho");
+  if (!(amount>0)) return toast("Gib einen Betrag über 0 € ein.");
+  if (!split.length) return toast("Wähl aus, für wen die Ausgabe war.");
+  api.add("expenses",{title:$("#expTitle").value.trim(), amount, paidBy:$("#expPayer").value, split});
+  if ($("#expTitle").value.startsWith("Einkauf: ")) S.shopping.filter(s=>s.done).forEach(s=>api.remove("shopping",s.id));
+  $("#expTitle").value=""; $("#expAmount").value=""; toast(`${money(amount)} eingetragen.`);
+});
+$("#noteForm").addEventListener("submit", e=>{
+  e.preventDefault();
+  api.add("notes",{text:$("#noteText").value.trim(), date:$("#noteDate").value||null, by:me||null});
+  $("#noteText").value=""; $("#noteDate").value=""; toast("Angepinnt.");
+});
+
+let pendingDelete = null;
+document.addEventListener("click", e=>{
+  const t = e.target.closest("button,input"); if (!t) return;
+  if (t.dataset.shop){ const s=S.shopping.find(x=>x.id===t.dataset.shop); if(s) api.update("shopping",s.id,{done:!s.done}); return; }
+  if (t.dataset.choreDone){
+    const c=S.chores.find(x=>x.id===t.dataset.choreDone); if(!c) return;
+    const r=(c.rotation||[]).filter(member); const doer = me || choreAssignee(c);
+    let idx = c.idx||0;
+    if (r.length){ const pos = r.indexOf(doer); idx = ((pos>=0?pos:idx%r.length)+1) % r.length; idx = c.rotation.indexOf(r[idx]); }
+    const base = c.due > today() ? c.due : today();
+    api.update("chores",c.id,{idx, due:addDays(base,c.every), lastBy:doer||null, lastAt:today()});
+    toast(`${c.title}: erledigt. Danke!`); return;
+  }
+  if (t.dataset.chorePass){
+    const c=S.chores.find(x=>x.id===t.dataset.chorePass); if(!c) return;
+    const r=(c.rotation||[]).filter(member); const cur=r.indexOf(choreAssignee(c)); const nxt=r[(cur+1)%r.length];
+    api.update("chores",c.id,{idx:c.rotation.indexOf(nxt)}); toast(`${mName(nxt)} ist jetzt dran.`); return;
+  }
+  if (t.dataset.settle){
+    const [from,to,amount]=t.dataset.settle.split(":");
+    api.add("expenses",{title:"Ausgleich",amount:+amount,paidBy:from,split:[to],settle:true}); toast("Als bezahlt eingetragen."); return;
+  }
+  if (t.dataset.del || t.dataset.delMember){
+    const key = t.dataset.del || "members:"+t.dataset.delMember;
+    if (pendingDelete !== key){ pendingDelete = key; t.textContent = "Sicher?"; t.style.color="var(--bad)"; setTimeout(()=>{ if(pendingDelete===key){ pendingDelete=null; render(); } },3000); return; }
+    pendingDelete = null; const [col,id]=key.split(":");
+    if (col==="members") toast(`${mName(id)} ist ausgezogen. Alte Einträge bleiben erhalten.`);
+    api.remove(col,id);
+  }
+});
+
+route(); render(); connect();
+})();
+</script>
+
+</body>
+</html>
