@@ -16,3 +16,7 @@ UI-Sprache: Deutsch.
   Der Standardcode steht nur als PBKDF2-Hash (`DEFAULT_ADMIN`) in `index.html`, niemals im Klartext committen.
   Ändert jemand den Code in der App, liegt der neue Hash in `wgs/<code>/wg/admin`.
 - Notlösung ohne App: `tools/wg_code.py` (`show` / `change`). Den neuen Einladungslink nur Felix im Chat geben.
+
+## Design
+- Glas-Look: Milchglas-Flächen (`--glass`, `--edge`) auf Farbverlauf, schwebende Tab-Leiste `#tabs` unten, Plus-Knopf `#fab` rechts daneben.
+- „Einstellungen“ im Bereich WG speichert die Darstellung pro Gerät in localStorage `wg-look` (Theme, Akzentfarbe, Schriftgröße, Leistenbeschriftung, Glas, Verlauf, Animationen). `applyLook()` läuft direkt nach dem CSS, damit nichts flackert.
