@@ -628,7 +628,13 @@ async function fb(){
   if (!FB) {
     const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-app.js`);
     const F = await import(`https://www.gstatic.com/firebasejs/${FB_VERSION}/firebase-firestore.js`);
-    FB = { F, fs: F.getFirestore(initializeApp(FIREBASE_CONFIG)) };
+    const app = initializeApp(FIREBASE_CONFIG);
+    let fs = null;
+    // Offline-Speicher: letzter Stand bleibt lesbar, Änderungen ohne Netz werden später übertragen (auch nach Neustart)
+    try {
+      if (F.initializeFirestore && F.persistentLocalCache) fs = F.initializeFirestore(app, { localCache: F.persistentLocalCache(F.persistentMultipleTabManager ? { tabManager: F.persistentMultipleTabManager() } : {}) });
+    } catch (e) { fs = null; }
+    FB = { F, fs: fs || F.getFirestore(app) };
   }
   return FB;
 }
@@ -690,12 +696,12 @@ async function connect(){
   const invite = `${location.origin}${location.pathname}?wg=${code}`;
   $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code;
   try { db = await firebaseDb(code); }
-  catch { setBanner("Die Datenbank konnte nicht geladen werden. Prüf deine Internetverbindung und lade die Seite neu."); return; }
+  catch { setBanner("Die Datenbank konnte nicht geladen werden. Prüf deine Internetverbindung und lade die Seite neu."); window.addEventListener("online", ()=>location.reload(), { once:true }); return; }
   S.mode="db";
   const seen = new Set();
   const NEED = COLS.length + 2;
-  const timer = setTimeout(()=>{ if (seen.size < NEED) setBanner("Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell."); }, 10000);
-  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===NEED){ dataReady = true; clearTimeout(timer); setBanner(""); } } };
+  const timer = setTimeout(()=>{ if (seen.size < NEED) setBanner(navigator.onLine ? "Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell." : OFFLINE_TXT); }, 10000);
+  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===NEED){ dataReady = true; clearTimeout(timer); if (!$("#statusBanner").dataset.offline) setBanner(""); } } };
   const fail = (e) => { clearTimeout(timer); setBanner(e.code==="permission-denied" ? "Kein Zugriff auf die Datenbank. Sind die Firestore-Regeln eingerichtet?" : "Die gemeinsamen Daten konnten nicht geladen werden. Lade die Seite neu."); };
   for (const c of COLS) db.collection(c).onSnapshot(snap => { S[c] = snap.docs.map(d=>({id:d.id,...d.data()})); ok(c,snap); render(); }, fail);
   db.doc("wg/info").onSnapshot(snap => {
@@ -705,9 +711,17 @@ async function connect(){
   }, fail);
   db.doc("wg/shophistory").onSnapshot(snap => { S.history = (snap.exists && snap.data().items) || []; renderSuggest(); }, ()=>{});
   db.doc("wg/admin").onSnapshot(snap => { S.admin = snap.exists ? snap.data() : null; S.adminLoaded = true; ok("admin",snap); render(); }, fail);
-  render();
+  render(); syncOnline();
 }
 function setBanner(t){ const b=$("#statusBanner"); b.textContent=t; b.hidden=!t; }
+const OFFLINE_TXT = "Keine Internetverbindung. Du siehst den letzten Stand. Was du jetzt änderst, wird übertragen, sobald du wieder online bist.";
+function syncOnline(){
+  const b = $("#statusBanner");
+  if (!navigator.onLine) { b.dataset.offline = "1"; setBanner(OFFLINE_TXT); }
+  else if (b.dataset.offline) { delete b.dataset.offline; setBanner(""); if (S.mode==="db") toast("Wieder online."); }
+}
+window.addEventListener("offline", syncOnline);
+window.addEventListener("online", syncOnline);
 
 /* ---------- helpers ---------- */
 const member = (id) => S.members.find(m=>m.id===id);
@@ -731,7 +745,11 @@ function dueChip(due){
   if (d === 1) return `<span class="chip warn">morgen</span>`;
   return `<span class="chip neutral">in ${d} Tagen</span>`;
 }
-const choreAssignee = (c) => { const r=(c.rotation||[]).filter(member); return r.length ? r[(c.idx||0)%r.length] : null; };
+// idx zeigt immer auf eine Stelle in c.rotation. Ausgezogene werden übersprungen, die Zählweise ist überall dieselbe.
+function rotAt(c, i){ const rot=c.rotation||[]; for (let k=0;k<rot.length;k++){ const j=((i%rot.length)+rot.length+k)%rot.length; if (member(rot[j])) return j; } return -1; }
+function rotNext(c, i){ const rot=c.rotation||[]; return rot.length ? rotAt(c, i+1) : -1; }
+const choreAssignee = (c) => { const j = rotAt(c, c.idx||0); return j<0 ? null : c.rotation[j]; };
+const choreNextPerson = (c) => { const j = rotNext(c, rotAt(c, c.idx||0)); return j<0 ? null : c.rotation[j]; };
 
 function balances(){
   const b = Object.fromEntries(S.members.map(m=>[m.id,0]));
@@ -836,7 +854,7 @@ function render(){
   // Putzplan
   $("#choreList").innerHTML = L(chores, c=>{
     const a = choreAssignee(c); const r=(c.rotation||[]).filter(member);
-    const next = r.length>1 ? r[(r.indexOf(a)+1)%r.length] : null;
+    const next = r.length>1 ? choreNextPerson(c) : null;
     const every = rhythmText(c);
     const last = c.lastBy ? ` · zuletzt ${esc(mName(c.lastBy))}, ${fmtDate(c.lastAt)}` : "";
     return `<li style="flex-wrap:wrap" class="${c.id===editingChore?"editing":""}"><div class="grow" style="flex-basis:200px"><b>${esc(c.title)}</b> ${dueChip(c.due)}
@@ -1059,6 +1077,7 @@ $("#adminLock").addEventListener("click", () => { try { localStorage.removeItem(
 $("#adminChangePw").addEventListener("click", () => { changingPw = true; render(); $("#adminPw1").focus(); });
 $("#newCodeBtn").addEventListener("click", async () => {
   if (!isAdmin()) return;
+  if (!navigator.onLine) return toast("Dafür brauchst du eine Internetverbindung.");
   if (!dataReady) return toast("Die Daten werden noch geladen. Versuch es gleich noch mal.");
   const ok = await askConfirm({ title:"Neuen WG-Code erzeugen?", text:"Alle anderen Geräte werden abgemeldet und brauchen den neuen Einladungslink. Dieses Gerät bleibt angemeldet.", ok:"Code erneuern", danger:true });
   if (!ok) return;
@@ -1353,7 +1372,7 @@ document.addEventListener("click", e=>{
     const c=S.chores.find(x=>x.id===t.dataset.choreDone); if(!c) return;
     const r=(c.rotation||[]).filter(member); const doer = me || choreAssignee(c);
     let idx = c.idx||0;
-    if (r.length){ const pos = r.indexOf(doer); idx = ((pos>=0?pos:idx%r.length)+1) % r.length; idx = c.rotation.indexOf(r[idx]); }
+    if (r.length){ const pos = doer && member(doer) ? c.rotation.indexOf(doer) : -1; const nx = rotNext(c, pos>=0 ? pos : rotAt(c, idx)); if (nx>=0) idx = nx; }
     const nextDue = (c.mode==="days" && (c.days||[]).length)
       ? nextWeekday(c.due > today() ? c.due : today(), c.days)   // nächster gewählter Wochentag nach dem jetzigen Termin
       : addDays(today(), c.every||7);                              // X Tage ab heute (dem Tag des Erledigens)
@@ -1364,14 +1383,14 @@ document.addEventListener("click", e=>{
     if (!ok) return;
     const before = {idx:c.idx||0, due:c.due, lastBy:c.lastBy||null, lastAt:c.lastAt||null};
     api.update("chores",c.id,{idx, due:nextDue, lastBy:doer||null, lastAt:today()});
-    toast(`${c.title}: erledigt. Danke!`, {label:"Rückgängig", fn:()=>{ api.update("chores",c.id,before); toast("Rückgängig gemacht."); }});
+    toast(`${c.title}: erledigt. ${nextPerson ? `Als Nächstes ${mName(nextPerson)}, ` : "Wieder fällig "}${fmtDate(nextDue)}.`, {label:"Rückgängig", fn:()=>{ api.update("chores",c.id,before); toast("Rückgängig gemacht."); }});
   })(); return; }
   if (t.dataset.chorePass){
     closeMenus();
     const c=S.chores.find(x=>x.id===t.dataset.chorePass); if(!c) return;
-    const r=(c.rotation||[]).filter(member); const cur=r.indexOf(choreAssignee(c)); const nxt=r[(cur+1)%r.length];
+    const j = rotNext(c, rotAt(c, c.idx||0)); if (j<0) return; const nxt = c.rotation[j];
     const before = c.idx||0;
-    api.update("chores",c.id,{idx:c.rotation.indexOf(nxt)});
+    api.update("chores",c.id,{idx:j});
     toast(`${mName(nxt)} ist jetzt dran.`, {label:"Rückgängig", fn:()=>{ api.update("chores",c.id,{idx:before}); toast("Rückgängig gemacht."); }}); return;
   }
   if (t.dataset.cal || t.dataset.calIcs || t.dataset.calGoogle){
@@ -1401,7 +1420,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-16.1";
+const APP_VERSION = "2026-11-18.1";
 let newVersion = null;
 async function checkUpdate(){
   try {
