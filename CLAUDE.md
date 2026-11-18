@@ -19,6 +19,7 @@ UI-Sprache: Deutsch.
 
 ## Design
 - Glas-Look: Milchglas-Flächen (`--glass`, `--edge`) auf Farbverlauf, schwebende Tab-Leiste `#tabs` unten, Plus-Knopf `#fab` rechts daneben.
-- „Einstellungen“ im Bereich WG speichert die Darstellung pro Gerät in localStorage `wg-look` (Theme, Akzentfarbe, Schriftgröße, Leistenbeschriftung, Glas, Verlauf, Animationen). `applyLook()` läuft direkt nach dem CSS, damit nichts flackert.
+- „Einstellungen“ im Bereich WG speichert die Darstellung pro Gerät in localStorage `wg-look` (Theme, Farbthema `accent`, eigene Farben `custom.l`/`custom.d`, Schriftgröße, Leistenbeschriftung, Glas, Verlauf, Animationen). `applyLook()` läuft direkt nach dem CSS und setzt alle Farb-Tokens inline auf `:root`, damit nichts flackert.
+- Farbthemen stehen in `THEMES` (je Hell `l` und Dunkel `d`, 10 Grundfarben aus `COLOR_KEYS`). Abgeleitete Tokens (Glas, Linien, *-soft, accent-ink) berechnet `applyLook()`.
 - `wg/info.onboarding`: `true` solange „Wer wohnt hier?“ offen bleibt (wird beim ersten Namen gesetzt, „Fertig“ setzt `false`). Fehlt das Feld (alte WGs), verschwindet die Karte ab 2 Mitbewohnern.
 - Fehlversuche beim Verwaltungscode zählt localStorage `wg-admin-fails` (ab dem 5. Versuch 30 s Wartezeit, danach doppelt so lang).

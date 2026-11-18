@@ -222,6 +222,29 @@ h1 a.home{padding-block:4px}
 .segc input{position:absolute;opacity:0;pointer-events:none}
 .segc label:has(input:checked){background:var(--glass-strong);color:var(--fg);box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .segc label:has(input:focus-visible){outline:2px solid var(--accent)}
+.themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:10px 6px}
+.themes label{display:grid;justify-items:center;gap:5px;font-size:.68rem;font-weight:600;color:var(--muted);cursor:pointer;position:relative;text-align:center;line-height:1.2}
+.themes input{position:absolute;opacity:0;pointer-events:none}
+.themes .dot{width:42px;height:42px;border-radius:50%;position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+.themes .dot i{position:absolute;right:-2px;bottom:-2px;width:18px;height:18px;border-radius:50%;border:2px solid var(--surface)}
+.themes label:has(input:checked){color:var(--fg)}
+.themes label:has(input:checked) .dot{box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--fg)}
+.themes label:has(input:focus-visible) .dot{outline:2px solid var(--fg);outline-offset:4px}
+#colorDetails summary{cursor:pointer;list-style:none;display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 10px;padding:4px 0}
+#colorDetails summary::-webkit-details-marker{display:none}
+#colorDetails summary b::after{content:" ›";color:var(--muted)}
+#colorDetails[open] summary b::after{content:" ⌄"}
+.colors{display:grid;gap:2px;margin-top:8px}
+.colors label{display:flex;align-items:center;gap:12px;padding:7px 0;border-top:1px solid var(--line);cursor:pointer}
+.colors label:first-child{border-top:0}
+.colors label span{flex:1;min-width:0;font-size:.86rem;font-weight:600}
+.colors label small{display:block;font-weight:400;color:var(--muted);font-size:.74rem}
+.colors input[type=color]{appearance:none;-webkit-appearance:none;width:44px;height:32px;border:1px solid var(--line);border-radius:10px;padding:2px;background:var(--surface);cursor:pointer;flex:none}
+.colors input[type=color]::-webkit-color-swatch-wrapper{padding:0}
+.colors input[type=color]::-webkit-color-swatch{border:0;border-radius:7px}
+.colors input[type=color]::-moz-color-swatch{border:0;border-radius:7px}
+.colors .changed{font-size:.7rem;color:var(--accent);font-weight:700}
+.warnline{color:var(--bad);font-weight:600}
 .swatches{display:flex;flex-wrap:wrap;gap:10px}
 .swatches label{width:34px;height:34px;border-radius:50%;cursor:pointer;position:relative;display:grid;place-items:center}
 .swatches input{position:absolute;opacity:0;pointer-events:none}
@@ -237,40 +260,74 @@ h1 a.home{padding-block:4px}
 </style>
 <script>
 /* Darstellung: wird vor dem ersten Zeichnen angewendet, gilt nur für dieses Gerät */
-const ACCENTS = {
-  oliv:   { name:"Oliv",    l:"#5a6b1e", d:"#c3d27a", bl:"#c9d79a", bd:"#3a4718" },
-  salbei: { name:"Salbei",  l:"#4f7a5a", d:"#9fd3ab", bl:"#bfd9c3", bd:"#203a28" },
-  petrol: { name:"Petrol",  l:"#0e7c7b", d:"#6fd3cf", bl:"#a9dcd6", bd:"#12383a" },
-  blau:   { name:"Blau",    l:"#2d6cdf", d:"#7fb0ff", bl:"#b9cdf2", bd:"#1b2c4d" },
-  lila:   { name:"Lila",    l:"#7b4bc4", d:"#c4a3ff", bl:"#d4c4f0", bd:"#2f2147" },
-  rosa:   { name:"Rosa",    l:"#c03a7a", d:"#ff96c6", bl:"#f0c4d8", bd:"#45192e" },
-  rot:    { name:"Rot",     l:"#c0392b", d:"#ff8b7d", bl:"#f2c4bc", bd:"#45201b" },
-  orange: { name:"Orange",  l:"#c25e00", d:"#ffb366", bl:"#f5d2a8", bd:"#45300f" },
-  graphit:{ name:"Graphit", l:"#3c3f44", d:"#d0d3d8", bl:"#d4d6da", bd:"#26282c" }
+const COLOR_KEYS = [
+  ["accent","Akzent","Knöpfe, Haken, Links"],
+  ["bg","Hintergrund","Grundfarbe hinter allem"],
+  ["b1","Verlauf 1","Farbschimmer oben und unten"],
+  ["b2","Verlauf 2","Farbschimmer in der Mitte"],
+  ["card","Karten","Flächen, Fenster, Leiste"],
+  ["fg","Text","Überschriften und Einträge"],
+  ["muted","Nebentext","Namen, Daten, Hinweise"],
+  ["good","Plus","Guthaben, „bekommst zurück“"],
+  ["bad","Minus","Schulden, überfällig"],
+  ["warn","Hinweis","„heute“, „morgen“, Warnungen"]
+];
+function hsl(h, s, l){ s/=100; l/=100; const k=n=>(n+h/30)%12, a=s*Math.min(l,1-l), f=n=>l-a*Math.max(-1,Math.min(k(n)-3,9-k(n),1)); return "#"+[f(0),f(8),f(4)].map(x=>Math.round(x*255).toString(16).padStart(2,"0")).join(""); }
+function makeTheme(name, h, h2, aL, aD, sat=1){
+  const S = v => v*sat;
+  return { name,
+    l:{ accent:aL, bg:hsl(h,S(18),94), b1:hsl(h,S(42),78), b2:hsl(h2,S(32),76), card:hsl(h,S(25),99), fg:hsl(h,S(25),9), muted:hsl(h,S(9),36), good:"#1d7f45", bad:"#c4261d", warn:"#9a5a00" },
+    d:{ accent:aD, bg:hsl(h,S(25),6), b1:hsl(h,S(38),20), b2:hsl(h2,S(32),17), card:hsl(h,S(16),14), fg:hsl(h,S(14),93), muted:hsl(h,S(8),64), good:"#5fd88c", bad:"#ff7a70", warn:"#f0b259" } };
+}
+const THEMES = {
+  oliv: { name:"Oliv",
+    l:{ accent:"#5a6b1e", bg:"#eef0e6", b1:"#c9d79a", b2:"#9fb2c4", card:"#ffffff", fg:"#16190f", muted:"#5d634f", good:"#1d7f45", bad:"#c4261d", warn:"#9a5a00" },
+    d:{ accent:"#c3d27a", bg:"#0f110b", b1:"#3a4718", b2:"#1d2e3d", card:"#1d2116", fg:"#f1f3ea", muted:"#a4a995", good:"#5fd88c", bad:"#ff7a70", warn:"#f0b259" } },
+  salbei:  makeTheme("Salbei",   140, 200, "#4f7a5a", "#9fd3ab"),
+  petrol:  makeTheme("Petrol",   180, 215, "#0e7c7b", "#6fd3cf"),
+  blau:    makeTheme("Ozean",    215, 185, "#2d6cdf", "#7fb0ff"),
+  nacht:   makeTheme("Mitternacht", 232, 280, "#4f5bd5", "#9aa4ff", 1.2),
+  lila:    makeTheme("Lavendel", 268, 320, "#7b4bc4", "#c4a3ff"),
+  rosa:    makeTheme("Beere",    330, 20,  "#c03a7a", "#ff96c6"),
+  rot:     makeTheme("Koralle",  8,   35,  "#c0392b", "#ff8b7d"),
+  orange:  makeTheme("Sonnenuntergang", 28, 335, "#c25e00", "#ffb366"),
+  sand:    makeTheme("Sand",     38,  20,  "#946226", "#e0b77a", 0.9),
+  graphit: makeTheme("Graphit",  220, 220, "#3c3f44", "#d0d3d8", 0.25)
 };
-const LOOK_DEFAULT = { theme:"auto", accent:"oliv", size:"m", glass:true, bg:true, labels:"auto", motion:true };
+const LOOK_DEFAULT = { theme:"auto", accent:"oliv", size:"m", glass:true, bg:true, labels:"auto", motion:true, custom:{} };
 const FONT_SIZES = { s:"93.75%", m:"100%", l:"110%", xl:"120%" };
 function getLook(){ try { return { ...LOOK_DEFAULT, ...JSON.parse(localStorage.getItem("wg-look")||"{}") }; } catch { return { ...LOOK_DEFAULT }; } }
+function lookIsDark(L){ return L.theme === "dark" || (L.theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches); }
+function lookColors(L, dark){ const t = THEMES[L.accent] || THEMES.oliv, mode = dark ? "d" : "l"; return { ...t[mode], ...((L.custom||{})[mode]||{}) }; }
+function luminance(hex){ const c = String(hex).replace("#",""); if (c.length<6) return 0; const v = [0,2,4].map(i=>{ const x=parseInt(c.slice(i,i+2),16)/255; return x<=.03928 ? x/12.92 : ((x+.055)/1.055)**2.4; }); return .2126*v[0]+.7152*v[1]+.0722*v[2]; }
+function contrast(a, b){ const x=luminance(a), y=luminance(b); return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); }
 function applyLook(L = getLook()){
   const r = document.documentElement;
   if (L.theme === "auto") r.removeAttribute("data-theme"); else r.setAttribute("data-theme", L.theme);
-  const dark = L.theme === "dark" || (L.theme === "auto" && matchMedia("(prefers-color-scheme: dark)").matches);
-  const a = ACCENTS[L.accent] || ACCENTS.oliv;
-  const acc = dark ? a.d : a.l;
-  r.style.setProperty("--accent", acc);
-  r.style.setProperty("--accent-ink", dark ? "#15170f" : "#ffffff");
-  r.style.setProperty("--accent-soft", `color-mix(in srgb, ${acc} ${dark?18:13}%, transparent)`);
-  r.style.setProperty("--b1", dark ? a.bd : a.bl);
+  const c = lookColors(L, lookIsDark(L));
+  const darkBg = luminance(c.bg) < .2;          // Feinheiten (Glas, Linien) richten sich nach dem gewählten Hintergrund
+  const mix = (col, p) => `color-mix(in srgb, ${col} ${p}%, transparent)`;
+  const set = (k, v) => r.style.setProperty(k, v);
+  set("--bg", c.bg); set("--fg", c.fg); set("--muted", c.muted); set("--surface", c.card);
+  set("--surface-2", darkBg ? mix(c.fg, 7) : mix(c.card, 55));
+  set("--line", mix(c.fg, 10)); set("--sel", mix(c.fg, darkBg ? 10 : 8));
+  set("--glass", L.glass ? mix(c.card, darkBg ? 62 : 58) : c.card); set("--glass-strong", L.glass ? mix(c.card, darkBg ? 90 : 85) : c.card);
+  set("--edge", mix("#ffffff", darkBg ? 10 : 85));
+  set("--accent", c.accent); set("--accent-soft", mix(c.accent, darkBg ? 18 : 13));
+  set("--accent-ink", contrast(c.accent, "#ffffff") >= 3 || contrast(c.accent, "#ffffff") >= contrast(c.accent, "#15170f") ? "#ffffff" : "#15170f");   // Weiß bevorzugt, solange gut lesbar
+  for (const k of ["good","warn","bad"]) { set("--"+k, c[k]); set(`--${k}-soft`, mix(c[k], darkBg ? 15 : 12)); }
+  set("--b1", c.b1); set("--b2", c.b2);
+  r.style.colorScheme = darkBg ? "dark" : "light";
   r.style.fontSize = FONT_SIZES[L.size] || "100%";
   r.classList.toggle("solid", !L.glass);
   r.classList.toggle("plainbg", !L.bg);
   r.classList.toggle("labels-on", L.labels === "on");
   r.classList.toggle("labels-off", L.labels === "off");
   r.classList.toggle("nomotion", !L.motion);
-  const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = dark ? "#0f110b" : "#eef0e6";
+  const tc = document.querySelector('meta[name="theme-color"]'); if (tc) tc.content = c.bg;
 }
 applyLook();
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => applyLook());
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { applyLook(); window.fillLookForm?.(); });
 </script>
 
 <header>
@@ -529,7 +586,15 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => appl
     <div class="sheethead"><h2 id="settingsHead">Einstellungen</h2><button type="button" class="iconbtn" data-close-sheet aria-label="Schließen"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button></div>
     <form id="lookForm">
       <div class="setgrp"><b>Erscheinungsbild</b><div class="segc" role="radiogroup"><label><input type="radio" name="theme" value="auto">Automatisch</label><label><input type="radio" name="theme" value="light">Hell</label><label><input type="radio" name="theme" value="dark">Dunkel</label></div></div>
-      <div class="setgrp"><b>Akzentfarbe</b><div class="swatches" id="swatches"></div></div>
+      <div class="setgrp"><b>Farbthema</b><div class="themes" id="swatches"></div></div>
+      <div class="setgrp">
+        <details id="colorDetails">
+          <summary><b>Farben einzeln anpassen</b><span class="hint" id="colorModeHint"></span></summary>
+          <div class="colors" id="colorRows"></div>
+          <p class="hint warnline" id="contrastWarn" hidden></p>
+          <button type="button" class="ghost small" id="colorsReset" style="margin-top:10px">Eigene Farben zurücksetzen</button>
+        </details>
+      </div>
       <div class="setgrp"><b>Schriftgröße</b><div class="segc" role="radiogroup"><label><input type="radio" name="size" value="s">Klein</label><label><input type="radio" name="size" value="m">Normal</label><label><input type="radio" name="size" value="l">Groß</label><label><input type="radio" name="size" value="xl">Sehr groß</label></div></div>
       <div class="setgrp"><b>Beschriftung der Leiste unten</b><div class="segc" role="radiogroup"><label><input type="radio" name="labels" value="auto">Automatisch</label><label><input type="radio" name="labels" value="on">Immer</label><label><input type="radio" name="labels" value="off">Nur Symbole</label></div></div>
       <div class="setgrp">
@@ -1125,18 +1190,43 @@ function syncFab(v){
 
 /* ---------- Einstellungen ---------- */
 const SIZE_NAMES = { s:"Klein", m:"Normal", l:"Groß", xl:"Sehr groß" }, THEME_NAMES = { auto:"Automatisch", light:"Hell", dark:"Dunkel" };
-$("#swatches").innerHTML = Object.entries(ACCENTS).map(([k,a])=>`<label style="background:${a.l}" title="${a.name}"><input type="radio" name="accent" value="${k}" aria-label="${a.name}"></label>`).join("");
+$("#swatches").innerHTML = Object.entries(THEMES).map(([k,t])=>`<label><input type="radio" name="accent" value="${k}" aria-label="${t.name}"><span class="dot" style="background:linear-gradient(135deg, ${t.l.b1}, ${t.l.b2})"><i style="background:${t.l.accent}"></i></span>${t.name}</label>`).join("");
+$("#colorRows").innerHTML = COLOR_KEYS.map(([k,name,desc])=>`<label><span>${name} <em class="changed" data-changed="${k}" hidden>geändert</em><small>${desc}</small></span><input type="color" data-color="${k}" aria-label="${name}"></label>`).join("");
+const saveLook = (L) => { ls.set("wg-look", JSON.stringify(L)); applyLook(L); fillLookForm(); };
 function fillLookForm(){
-  const L = getLook(), f = $("#lookForm");
+  const L = getLook(), f = $("#lookForm"), dark = lookIsDark(L), mode = dark ? "d" : "l";
   ["theme","accent","size","labels"].forEach(n=>{ const el = f.querySelector(`input[name="${n}"][value="${L[n]}"]`); if (el) el.checked = true; });
   $("#lookGlass").checked = L.glass; $("#lookBg").checked = L.bg; $("#lookMotion").checked = L.motion;
-  $("#lookSummary").textContent = `${THEME_NAMES[L.theme]} · ${(ACCENTS[L.accent]||ACCENTS.oliv).name} · Schrift ${SIZE_NAMES[L.size]}`;
+  const c = lookColors(L, dark), own = (L.custom||{})[mode] || {};
+  document.querySelectorAll("[data-color]").forEach(i=>{ if (document.activeElement !== i) i.value = c[i.dataset.color]; });
+  document.querySelectorAll("[data-changed]").forEach(e=>e.hidden = !own[e.dataset.changed]);
+  $("#colorModeHint").textContent = `für den ${dark ? "dunklen" : "hellen"} Modus`;
+  const n = Object.keys((L.custom||{}).l||{}).length + Object.keys((L.custom||{}).d||{}).length;
+  $("#colorsReset").hidden = !n;
+  const warn = [];
+  if (contrast(c.fg, c.bg) < 4.5 || contrast(c.fg, c.card) < 4.5) warn.push("Text");
+  if (contrast(c.muted, c.card) < 3) warn.push("Nebentext");
+  if (contrast(c.accent, c.card) < 2.5) warn.push("Akzent");
+  $("#contrastWarn").hidden = !warn.length;
+  $("#contrastWarn").textContent = warn.length ? `${warn.join(" und ")} ${warn.length>1?"sind":"ist"} auf diesem Hintergrund schwer zu lesen.` : "";
+  const t = (THEMES[L.accent]||THEMES.oliv).name;
+  $("#lookSummary").textContent = `${THEME_NAMES[L.theme]} · ${t}${n?" (eigene Farben)":""} · Schrift ${SIZE_NAMES[L.size]}`;
 }
-$("#lookForm").addEventListener("change", ()=>{
-  const f = $("#lookForm"), val = n => f.querySelector(`input[name="${n}"]:checked`)?.value;
-  const L = { theme:val("theme"), accent:val("accent"), size:val("size"), labels:val("labels"), glass:$("#lookGlass").checked, bg:$("#lookBg").checked, motion:$("#lookMotion").checked };
-  ls.set("wg-look", JSON.stringify(L)); applyLook(L); fillLookForm();
+window.fillLookForm = fillLookForm;
+$("#lookForm").addEventListener("change", e=>{
+  if (e.target.dataset.color) return;
+  const f = $("#lookForm"), val = n => f.querySelector(`input[name="${n}"]:checked`)?.value, old = getLook();
+  const L = { ...old, theme:val("theme"), accent:val("accent"), size:val("size"), labels:val("labels"), glass:$("#lookGlass").checked, bg:$("#lookBg").checked, motion:$("#lookMotion").checked };
+  if (L.accent !== old.accent) L.custom = {};      // neues Farbthema = frisch starten
+  saveLook(L);
 });
+$("#colorRows").addEventListener("input", e=>{
+  const k = e.target.dataset.color; if (!k) return;
+  const L = getLook(), mode = lookIsDark(L) ? "d" : "l";
+  L.custom = { ...(L.custom||{}) }; L.custom[mode] = { ...(L.custom[mode]||{}), [k]: e.target.value };
+  saveLook(L);
+});
+$("#colorsReset").addEventListener("click", ()=>{ const L = getLook(); L.custom = {}; saveLook(L); toast("Eigene Farben zurückgesetzt."); });
 $("#lookReset").addEventListener("click", ()=>{ ls.set("wg-look", "{}"); applyLook(); fillLookForm(); toast("Darstellung zurückgesetzt"); });
 $("#openSettings").addEventListener("click", ()=>{ fillLookForm(); $("#sheet-settings").showModal(); });
 fillLookForm();
@@ -1420,7 +1510,7 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-18.1";
+const APP_VERSION = "2026-11-18.2";
 let newVersion = null;
 async function checkUpdate(){
   try {
