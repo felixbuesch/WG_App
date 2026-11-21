@@ -146,10 +146,6 @@ li.done .grow{color:var(--muted);text-decoration:line-through}
 .editing{outline:2px solid var(--accent);outline-offset:2px;border-radius:12px}
 .noteside{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:none}
 .calmenu{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-#updateBar{position:fixed;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));max-width:520px;margin:0 auto;bottom:calc(84px + env(safe-area-inset-bottom,0px));z-index:15;background:var(--accent);color:var(--accent-ink);padding:10px 10px 10px 16px;border-radius:20px;box-shadow:var(--shadow);font-size:.88rem}
-#updateBar .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0}
-#updateBar button{background:var(--accent-ink);color:var(--accent)}
-body.has-update main{padding-bottom:170px}
 #confirmDlg{border:1px solid var(--edge);border-radius:22px;background:var(--glass-strong);color:var(--fg);padding:20px;width:min(92vw,380px);box-shadow:0 20px 50px rgba(0,0,0,.25)}
 #confirmDlg::backdrop{background:rgba(20,22,12,.35);backdrop-filter:blur(2px)}
 #confirmDlg h2{margin-bottom:6px}
@@ -160,7 +156,6 @@ h1 a.home{color:inherit;text-decoration:none;display:block;border-radius:6px}
 h1 a.home:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 .fab{position:fixed;right:max(12px,env(safe-area-inset-right,0px));bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:12;width:58px;height:58px;border-radius:50%;padding:0;display:grid;place-items:center;background:var(--glass);border:1px solid var(--edge);color:var(--fg);box-shadow:var(--shadow)}
 .fab:active{transform:scale(.96)}
-body.has-update #toast{bottom:calc(150px + env(safe-area-inset-bottom,0px))}
 dialog.sheet{border:1px solid var(--edge);background:var(--glass-strong);color:var(--fg);width:100%;max-width:560px;max-height:88vh;overflow:auto;margin:auto auto 0;border-radius:26px 26px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 40px rgba(0,0,0,.2)}
 dialog.sheet::backdrop{background:rgba(20,22,12,.35);backdrop-filter:blur(2px)}
 @media (min-width:640px){dialog.sheet{margin:auto;border-radius:24px;padding:20px}}
@@ -606,7 +601,6 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { ap
     </form>
   </dialog>
 <button class="fab" id="fab" type="button" hidden><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
-<div id="updateBar" role="status" hidden><div class="wrap"><span><b>Neue Version verfügbar.</b> Tippe auf Aktualisieren, um sie zu laden.</span><button id="updateBtn">Aktualisieren</button></div></div>
 <dialog id="confirmDlg" aria-labelledby="confirmTitle">
   <h2 id="confirmTitle"></h2>
   <p id="confirmText"></p>
@@ -761,13 +755,12 @@ async function connect(){
   const invite = `${location.origin}${location.pathname}?wg=${code}`;
   $("#inviteLink").value = invite; $("#wgCodeShow").textContent = code;
   try { db = await firebaseDb(code); }
-  catch { setBanner("Die Datenbank konnte nicht geladen werden. Prüf deine Internetverbindung und lade die Seite neu."); window.addEventListener("online", ()=>location.reload(), { once:true }); return; }
+  catch { window.addEventListener("online", ()=>location.reload(), { once:true }); return; }   // still neu versuchen, sobald wieder Netz da ist
   S.mode="db";
   const seen = new Set();
   const NEED = COLS.length + 2;
-  const timer = setTimeout(()=>{ if (seen.size < NEED) setBanner(navigator.onLine ? "Die gemeinsamen Daten sind gerade nicht erreichbar. Die Anzeige ist evtl. nicht aktuell." : OFFLINE_TXT); }, 10000);
-  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===NEED){ dataReady = true; clearTimeout(timer); if (!$("#statusBanner").dataset.offline) setBanner(""); } } };
-  const fail = (e) => { clearTimeout(timer); setBanner(e.code==="permission-denied" ? "Kein Zugriff auf die Datenbank. Sind die Firestore-Regeln eingerichtet?" : "Die gemeinsamen Daten konnten nicht geladen werden. Lade die Seite neu."); };
+  const ok = (k, snap) => { if (!snap.metadata.fromCache) { seen.add(k); if (seen.size===NEED) dataReady = true; } };
+  const fail = (e) => { if (e.code==="permission-denied") setBanner("Kein Zugriff auf die Datenbank. Sind die Firestore-Regeln eingerichtet?"); };
   for (const c of COLS) db.collection(c).onSnapshot(snap => { S[c] = snap.docs.map(d=>({id:d.id,...d.data()})); ok(c,snap); render(); }, fail);
   db.doc("wg/info").onSnapshot(snap => {
     S.info = snap.exists ? snap.data() : {};
@@ -776,17 +769,9 @@ async function connect(){
   }, fail);
   db.doc("wg/shophistory").onSnapshot(snap => { S.history = (snap.exists && snap.data().items) || []; renderSuggest(); }, ()=>{});
   db.doc("wg/admin").onSnapshot(snap => { S.admin = snap.exists ? snap.data() : null; S.adminLoaded = true; ok("admin",snap); render(); }, fail);
-  render(); syncOnline();
+  render();
 }
 function setBanner(t){ const b=$("#statusBanner"); b.textContent=t; b.hidden=!t; }
-const OFFLINE_TXT = "Keine Internetverbindung. Du siehst den letzten Stand. Was du jetzt änderst, wird übertragen, sobald du wieder online bist.";
-function syncOnline(){
-  const b = $("#statusBanner");
-  if (!navigator.onLine) { b.dataset.offline = "1"; setBanner(OFFLINE_TXT); }
-  else if (b.dataset.offline) { delete b.dataset.offline; setBanner(""); if (S.mode==="db") toast("Wieder online."); }
-}
-window.addEventListener("offline", syncOnline);
-window.addEventListener("online", syncOnline);
 
 /* ---------- helpers ---------- */
 const member = (id) => S.members.find(m=>m.id===id);
@@ -1510,22 +1495,28 @@ document.addEventListener("click", e=>{
 });
 
 /* ---------- Updates ---------- */
-const APP_VERSION = "2026-11-18.2";
-let newVersion = null;
+const APP_VERSION = "2026-11-21.1";
+// Neue Version still laden: sofort, solange noch niemand etwas angetippt hat, sonst sobald die App in den Hintergrund geht.
+let newVersion = null, touched = false;
+["pointerdown","keydown"].forEach(t=>addEventListener(t, ()=>{ touched = true; }, { once:true, capture:true }));
+function loadNewVersion(){
+  try { if (sessionStorage.getItem("wg-reload-for") === newVersion) return; sessionStorage.setItem("wg-reload-for", newVersion); } catch {}   // höchstens einmal pro Version, keine Schleife
+  const q = new URLSearchParams(); if (WG) q.set("wg", WG); if (me) q.set("me", me); q.set("v", newVersion || Date.now());
+  location.replace(`${location.pathname}?${q}${location.hash}`);
+}
 async function checkUpdate(){
   try {
     const r = await fetch(`version.json?t=${Date.now()}`, {cache:"no-store"}); if (!r.ok) return;
     const v = (await r.json()).version;
-    if (v && v !== APP_VERSION) { newVersion = v; $("#updateBar").hidden = false; document.body.classList.add("has-update"); }
+    if (v && v !== APP_VERSION) { newVersion = v; if (!touched && !document.querySelector("dialog[open]")) loadNewVersion(); }
   } catch {}
 }
-$("#updateBtn").addEventListener("click", () => {
-  const q = new URLSearchParams(); if (WG) q.set("wg", WG); if (me) q.set("me", me); q.set("v", newVersion || Date.now());
-  location.replace(`${location.pathname}?${q}${location.hash}`);
-});
-setTimeout(checkUpdate, 3000);
+setTimeout(checkUpdate, 1500);
 setInterval(checkUpdate, 15*60*1000);
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && newVersion) loadNewVersion();
+  else if (document.visibilityState === "visible") checkUpdate();
+});
 
 route(); render(); connect();
 { const n = ls.get("wg-moved-note"); if (n) { try { localStorage.removeItem("wg-moved-note"); } catch {}

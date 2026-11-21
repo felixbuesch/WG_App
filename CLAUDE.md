@@ -8,7 +8,8 @@ UI-Sprache: Deutsch.
 - Versionsnummer erhöhen, und zwar an **beiden** Stellen gleich:
   - `APP_VERSION` in `index.html`
   - `version.json`
-  Format: `JJJJ-MM-TT.N`. Nur dann sehen installierte Apps den „Aktualisieren“-Hinweis.
+  Format: `JJJJ-MM-TT.N`. Nur dann laden installierte Apps die neue Version (still: sofort beim Start, sonst wenn die App in den Hintergrund geht; kein Hinweis, keine Leiste).
+- Keine Statushinweise zu Verbindung/Aktualität anzeigen (Felix will das nicht). Offline-Änderungen überträgt Firestore still.
 - Vorhandene Daten in Firestore müssen weiter funktionieren (Felder nur ergänzen, nicht umbenennen).
 
 ## Verwaltung / WG-Code ändern
